@@ -1,0 +1,236 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id             String   @id
+  email          String   @unique
+  passwordHash   String
+  fullName       String
+  completedTasks Int      @default(0)
+  successRate    Float    @default(0)
+  disputeRate    Float    @default(0)
+  totalEscrows   Int      @default(0)
+  totalDisputes  Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  // Relations
+  buyerEscrows     Escrow[]          @relation("BuyerEscrows")
+  sellerEscrows    Escrow[]          @relation("SellerEscrows")
+  disputesRaised   Dispute[]         @relation("DisputesRaised")
+  disputesResolved Dispute[]         @relation("DisputesResolved")
+  evidenceUploaded DisputeEvidence[] @relation("EvidenceUploaded")
+
+  // State transitions triggered by this user
+  triggeredTransitions StateTransition[] @relation("TriggeredBy")
+
+  // Notifications
+  notifications Notification[]
+}
+
+enum NotificationType {
+  ESCROW_FUNDED
+  WORK_SUBMITTED
+  DISPUTE_OPENED
+  DISPUTE_MESSAGE
+  ESCROW_RELEASED
+  ESCROW_REFUNDED
+}
+
+model Notification {
+  id         String           @id
+  userId     String
+  type       NotificationType
+  message    String
+  resourceId String? // ID of Escrow or Dispute
+  read       Boolean          @default(false)
+  createdAt  DateTime         @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+}
+
+enum EscrowStatus {
+  // Initial states
+  CREATED
+  AWAITING_FUNDING
+
+  // Active states
+  FUNDED
+  IN_PROGRESS
+  SUBMITTED
+  VERIFIED
+
+  // Terminal states
+  RELEASED
+  REFUNDED
+  DISPUTED
+  CANCELLED
+  EXPIRED
+
+  // Legacy
+  PENDING
+}
+
+model Escrow {
+  id                  String       @id
+  escrowId            String       @unique // Human-readable ID
+  buyerUserId         String
+  sellerUserId        String
+  amountBCH           Float
+  description         String
+  escrowAddress       String       @unique
+  privateKeyEncrypted String
+  status              EscrowStatus @default(PENDING)
+  txHash              String?
+  expiresAt           DateTime?
+  submissionContent   String?
+
+  // Milestone timestamps
+  fundedAt        DateTime?
+  submittedAt     DateTime?
+  verifiedAt      DateTime?
+  releasedAt      DateTime?
+  disputeOpenedAt DateTime?
+  completedAt     DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  buyer            User              @relation("BuyerEscrows", fields: [buyerUserId], references: [id])
+  seller           User              @relation("SellerEscrows", fields: [sellerUserId], references: [id])
+  transactions     Transaction[]
+  disputes         Dispute[]
+  stateTransitions StateTransition[]
+  agentSubmissions AgentSubmission[]
+}
+
+enum TransactionDirection {
+  INBOUND
+  OUTBOUND
+}
+
+model Transaction {
+  id            String               @id
+  escrowId      String
+  txHash        String               @unique
+  amountBCH     Float
+  confirmations Int                  @default(0)
+  direction     TransactionDirection
+  createdAt     DateTime             @default(now())
+
+  // Relations
+  escrow Escrow @relation(fields: [escrowId], references: [id])
+}
+
+model Agent {
+  id               String   @id
+  agentId          String   @unique
+  name             String
+  description      String?
+  completedTasks   Int      @default(0)
+  successRate      Float    @default(0)
+  disputeRate      Float    @default(0)
+  totalSubmissions Int      @default(0)
+  totalDisputes    Int      @default(0)
+  isActive         Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+enum SubmissionStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+model AgentSubmission {
+  id           String           @id
+  submissionId String           @unique // Human-readable ID
+  escrowId     String?
+  taskType     String
+  taskPayload  Json
+  status       SubmissionStatus @default(PENDING)
+  result       Json?
+  error        String?
+  retryCount   Int              @default(0)
+  maxRetries   Int              @default(3)
+  submittedAt  DateTime         @default(now())
+  completedAt  DateTime?
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  // Relations
+  escrow Escrow? @relation(fields: [escrowId], references: [id])
+}
+
+enum DisputeStatus {
+  OPEN
+  UNDER_REVIEW
+  RESOLVED
+  CLOSED
+}
+
+model Dispute {
+  id         String        @id
+  disputeId  String        @unique // Human-readable ID
+  escrowId   String
+  raisedBy   String
+  reason     String
+  status     DisputeStatus @default(OPEN)
+  resolution String?
+  resolvedBy String?
+  resolvedAt DateTime?
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+
+  // Relations
+  escrow   Escrow            @relation(fields: [escrowId], references: [id])
+  raiser   User              @relation("DisputesRaised", fields: [raisedBy], references: [id])
+  resolver User?             @relation("DisputesResolved", fields: [resolvedBy], references: [id])
+  evidence DisputeEvidence[]
+}
+
+model DisputeEvidence {
+  id         String   @id
+  disputeId  String
+  type       String // text, file, link
+  content    String
+  uploadedBy String
+  uploadedAt DateTime @default(now())
+
+  // Relations
+  dispute  Dispute @relation(fields: [disputeId], references: [id])
+  uploader User    @relation("EvidenceUploaded", fields: [uploadedBy], references: [id])
+}
+
+model WebhookEvent {
+  id          String   @id
+  eventId     String   @unique
+  txHash      String
+  address     String
+  processedAt DateTime @default(now())
+  payload     Json
+  createdAt   DateTime @default(now())
+}
+
+model StateTransition {
+  id          String   @id
+  escrowId    String
+  fromState   String
+  toState     String
+  triggeredBy String?
+  metadata    Json?
+  timestamp   DateTime @default(now())
+  createdAt   DateTime @default(now())
+
+  // Relations
+  escrow      Escrow @relation(fields: [escrowId], references: [id])
+  triggerUser User?  @relation("TriggeredBy", fields: [triggeredBy], references: [id])
+}
