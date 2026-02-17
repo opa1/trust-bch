@@ -14,7 +14,7 @@ import { formatDistanceToNow } from "date-fns";
 import { CheckCheck, MessageSquare, Wallet, ShieldAlert } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { NotificationType } from "@prisma/client";
+// removed NotificationType import to fix build error
 
 export function NotificationSheet() {
   const {
@@ -36,8 +36,8 @@ export function NotificationSheet() {
     if (notification.resourceId) {
       // Navigate based on type
       if (
-        notification.type === NotificationType.DISPUTE_OPENED ||
-        notification.type === NotificationType.DISPUTE_MESSAGE
+        notification.type === "DISPUTE_OPENED" ||
+        notification.type === "DISPUTE_MESSAGE"
       ) {
         // Navigate to escrow and anchor to dispute
         // Assume resourceId is disputeId for DISPUTE types?
@@ -151,7 +151,12 @@ export function NotificationSheet() {
                       {getIcon(n.type)}
                     </div>
                     <div className="w-full flex-1 space-y-1">
-                      <p className={cn("w-full text-sm", !n.read && "font-medium")}>
+                      <p
+                        className={cn(
+                          "w-full text-sm",
+                          !n.read && "font-medium",
+                        )}
+                      >
                         {n.message}
                       </p>
                       <p className="text-xs text-muted-foreground">
