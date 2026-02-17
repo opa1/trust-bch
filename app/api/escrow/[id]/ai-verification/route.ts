@@ -5,7 +5,7 @@ import { prisma } from "@/lib/db/prisma";
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: { id: string } },
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
     const auth = await verifyAuth(req);
@@ -14,7 +14,7 @@ export async function GET(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const escrowId = await params.id;
+    const { id: escrowId } = await params;
 
     // Verify user is buyer or seller
     const escrow = await prisma.escrow.findFirst({

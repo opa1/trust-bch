@@ -4,7 +4,7 @@ import { verifyAuth } from "@/lib/auth";
 
 export async function POST(
   req: NextRequest,
-  { params }: { params: { id: string } },
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
     const auth = await verifyAuth(req);
@@ -13,7 +13,7 @@ export async function POST(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const escrowId = params.id;
+    const { id: escrowId } = await params;
     const escrow = await buyerApproveWork(escrowId, auth.userId);
 
     return NextResponse.json({

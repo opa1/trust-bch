@@ -4,7 +4,7 @@ import { verifyAuth } from "@/lib/auth";
 
 export async function POST(
   req: NextRequest,
-  { params }: { params: { id: string } },
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
     const auth = await verifyAuth(req);
@@ -23,7 +23,7 @@ export async function POST(
       );
     }
 
-    const escrowId = params.id;
+    const { id: escrowId } = await params;
     const escrow = await buyerRequestRevision(escrowId, auth.userId, feedback);
 
     return NextResponse.json({
