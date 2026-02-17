@@ -50,7 +50,13 @@ export async function GET(
         expiresAt: escrow.expiresAt,
         createdAt: escrow.createdAt,
         updatedAt: escrow.updatedAt,
+        submissionContent: escrow.submissionContent,
         disputes: escrow.disputes,
+        logs:
+          escrow.stateTransitions?.map((t: any) => ({
+            action: `${t.fromState} → ${t.toState}`,
+            createdAt: t.timestamp,
+          })) || [],
       },
     });
   } catch (error) {

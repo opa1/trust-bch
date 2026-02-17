@@ -1,70 +1,78 @@
 "use client";
 
 import * as React from "react";
-import { apiClient } from "@/lib/api-client";
+import { useDashboardData } from "@/hooks/use-dashboard-data";
 import { OverviewCards } from "@/components/dashboard/overview-cards";
 import { PendingEscrowsTable } from "@/components/dashboard/pending-escrows-table";
 import { NotificationsPanel } from "@/components/dashboard/notifications-panel";
 
 export default function DashboardPage() {
-  const [escrows, setEscrows] = React.useState<any[]>([]);
-  const [isLoading, setIsLoading] = React.useState(true);
-
-  React.useEffect(() => {
-    const loadDashboardData = async () => {
-      try {
-        setIsLoading(true);
-        // Fetch real data
-        const escrowsResponse = await apiClient.getUserEscrows();
-        setEscrows(escrowsResponse.escrows || []);
-      } catch (error) {
-        console.error("Failed to load dashboard data:", error);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    loadDashboardData();
-  }, []);
-
-  // Calculate stats from real data
-  const totalBalance = escrows.reduce(
-    (acc, curr) => acc + (curr.amountBCH || 0),
-    0,
-  );
-  const activeEscrowsCount = escrows.filter((e) =>
-    ["created", "awaiting_funding", "funded", "disputed"].includes(
-      e.status.toLowerCase(),
-    ),
-  ).length;
+  const {
+    escrows,
+    walletBalance,
+    successRate,
+    activeEscrowsCount,
+    completedEscrowsCount,
+    isLoading,
+    isRefreshing,
+    lastFetchedAt,
+    refresh,
+  } = useDashboardData();
 
   return (
     <div className="flex flex-col gap-6">
-      {/* Overview Cards */}
+      {/* Optional: Show subtle refresh indicator */}
+      {isRefreshing && (
+        <div className="text-xs text-muted-foreground text-right animate-pulse">
+          Refreshing data...
+        </div>
+      )}
+
+      {/* Optional: Show last updated time */}
+      {lastFetchedAt && !isRefreshing && (
+        <div className="flex items-center justify-end gap-2">
+          <span className="text-xs text-muted-foreground">
+            Last updated: {new Date(lastFetchedAt).toLocaleTimeString()}
+          </span>
+          <button
+            onClick={refresh}
+            className="text-xs text-primary hover:underline"
+          >
+            Refresh
+          </button>
+        </div>
+      )}
+
+      {/* Overview Cards - shows cached data instantly, no flash of zeros */}
       <OverviewCards
-        balance={totalBalance}
+        balance={walletBalance}
         activeEscrows={activeEscrowsCount}
-        reputation={100} // Mock for now until reputation API exists
-        agentCount={0} // Mock for now
+        reputation={successRate}
+        completedEscrows={completedEscrowsCount}
       />
 
       <div className="grid gap-6 md:grid-cols-7">
-        {/* Main Content (Table) - spans 4 cols on medium, 5 cols on large */}
+        {/* Main Content */}
         <div className="md:col-span-4 lg:col-span-5 space-y-4">
           <h2 className="text-xl font-semibold tracking-tight">
             Active Escrows
           </h2>
+
           <PendingEscrowsTable
             escrows={escrows.filter((e) =>
-              ["created", "awaiting_funding", "funded", "disputed"].includes(
-                e.status.toLowerCase(),
-              ),
+              [
+                "created",
+                "awaiting_funding",
+                "funded",
+                "disputed",
+                "funding_in_progress",
+              ].includes(e.status.toLowerCase()),
             )}
-            isLoading={isLoading}
+            isLoading={isLoading} // Only skeleton on first ever load
           />
         </div>
 
-        {/* Sidebar (Notifications) - spans 3 cols on medium, 2 cols on large */}
+        {/* Sidebar */}
         <div className="md:col-span-3 lg:col-span-2 space-y-4">
           <NotificationsPanel />
         </div>

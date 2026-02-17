@@ -1,4 +1,4 @@
-import "server-only";
+// import "server-only";
 
 // Fix for "More than one instance of bitcore-lib-cash found" error in Next.js
 // This error happens because bitcore-lib checks for global._bitcoreCash and throws if it exists.

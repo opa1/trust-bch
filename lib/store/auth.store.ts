@@ -5,7 +5,8 @@ export interface User {
   id: string;
   email: string;
   fullName: string;
-  createdAt: Date;
+  createdAt: string | Date;
+  walletAddress?: string;
 }
 
 export type AuthStatus = "loading" | "authenticated" | "guest";

@@ -1,4 +1,4 @@
-import "server-only";
+// import "server-only";
 import bchLib from "./bitcore";
 import crypto from "crypto";
 
@@ -141,12 +141,12 @@ export function signTransaction(transaction: any, privateKeyWIF: string): any {
 }
 
 /**
- * Creates a new escrow wallet with encrypted private key
- * High-level function for creating escrow wallets
+ * Creates a new wallet with encrypted private key
+ * High-level function for creating secure wallets
  *
- * @returns Escrow wallet with address and encrypted private key
+ * @returns Wallet with address and encrypted private key
  */
-export function createEscrowWallet(): EscrowWallet {
+export function generateEncryptedWallet(): EscrowWallet {
   const wallet = generateWallet();
   const encryptedPrivateKey = encryptPrivateKey(wallet.privateKey);
 

@@ -88,8 +88,8 @@ export async function downloadToTemp(
     fileStream.end();
 
     // Wait for stream to finish
-    await new Promise((resolve, reject) => {
-      fileStream.on("finish", resolve);
+    await new Promise<void>((resolve, reject) => {
+      fileStream.on("finish", () => resolve());
       fileStream.on("error", reject);
     });
 
@@ -108,9 +108,12 @@ export async function uploadToGemini(
   mimeType: string,
 ): Promise<{ uri: string; name: string } | null> {
   try {
-    const fileManager = new GoogleAIFileManager(
-      process.env.GOOGLE_API_KEY || "",
-    );
+    const apiKey =
+      process.env.GEMINI_API_KEY ||
+      process.env.GOOGLE_API_KEY ||
+      process.env.AGENT_API_KEY ||
+      "";
+    const fileManager = new GoogleAIFileManager(apiKey);
     const uploadResponse = await fileManager.uploadFile(filePath, {
       mimeType,
       displayName: "TrustBCH Submission Evidence",
@@ -127,9 +130,12 @@ export async function uploadToGemini(
  */
 export async function deleteFromGemini(name: string): Promise<void> {
   try {
-    const fileManager = new GoogleAIFileManager(
-      process.env.GOOGLE_API_KEY || "",
-    );
+    const apiKey =
+      process.env.GEMINI_API_KEY ||
+      process.env.GOOGLE_API_KEY ||
+      process.env.AGENT_API_KEY ||
+      "";
+    const fileManager = new GoogleAIFileManager(apiKey);
     await fileManager.deleteFile(name);
   } catch (error) {
     console.warn("Failed to cleanup Gemini file:", error);

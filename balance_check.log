@@ -1,0 +1,19 @@
+Checking balance for bitcoincash:qrkxlax958xjd5209y0lf0m6fuyj2lngeyw8jjva6h across providers...
+
+--- FullStack.cash ---
+URL: https://api.fullstack.cash/v5/electrumx/balance/bitcoincash:qrkxlax958xjd5209y0lf0m6fuyj2lngeyw8jjva6h
+Response Time: 4031ms
+Raw Data: {"success":true,"balance":{"confirmed":0,"unconfirmed":0}}...
+Parsed Balance: 0 BCH (Confirmed: 0, Unconf: 0)
+
+--- Blockchair ---
+URL: https://api.blockchair.com/bitcoin-cash/dashboards/address/bitcoincash:qrkxlax958xjd5209y0lf0m6fuyj2lngeyw8jjva6h
+Response Time: 2947ms
+Raw Data: {"data":{"bitcoincash:qrkxlax958xjd5209y0lf0m6fuyj2lngeyw8jjva6h":{"address":{"type":"pubkeyhash","s...
+Parsed Balance: 0 BCH (Confirmed: 0, Unconf: 0)
+
+--- Blockchain.info ---
+URL: https://api.blockchain.info/bch/multiaddr?active=qrkxlax958xjd5209y0lf0m6fuyj2lngeyw8jjva6h
+Response Time: 524ms
+Raw Data: {"addresses":[{"address":"1NZAb823xaPHxPf8HJZ34KsTRFtjBvo6g5","final_balance":0,"n_tx":2,"total_rece...
+Parsed Balance: 0 BCH (Confirmed: 0, Unconf: 0)

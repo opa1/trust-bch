@@ -25,6 +25,8 @@ export type ErrorCode =
   | "CONFIRMATIONS_TOO_LOW"
   | "BLOCKCHAIN_ERROR"
   | "INVALID_ADDRESS"
+  | "WALLET_NOT_FOUND"
+  | "TRANSACTION_TIMEOUT"
 
   // Dispute
   | "DISPUTE_NOT_FOUND"
@@ -47,6 +49,7 @@ export type ErrorCode =
   // General
   | "INTERNAL_ERROR"
   | "DATABASE_ERROR"
+  | "DATABASE_UPDATE_FAILED"
   | "NETWORK_ERROR"
   | "NOT_FOUND"
   | "DUPLICATE_ERROR"
@@ -157,6 +160,16 @@ export const ERROR_MESSAGES: Record<ErrorCode, ErrorDefinition> = {
     action: "Please check the address format and try again.",
     statusCode: 400,
   },
+  WALLET_NOT_FOUND: {
+    message: "User wallet not found.",
+    action: "Please contact support to resolve this issue.",
+    statusCode: 404, // or 500 if it should always exist
+  },
+  TRANSACTION_TIMEOUT: {
+    message: "Transaction broadcasted but not detected on network.",
+    action: "Please verify the transaction on a block explorer.",
+    statusCode: 408,
+  },
 
   // Dispute
   DISPUTE_NOT_FOUND: {
@@ -233,6 +246,12 @@ export const ERROR_MESSAGES: Record<ErrorCode, ErrorDefinition> = {
   DATABASE_ERROR: {
     message: "A database error occurred.",
     action: "Please try again later.",
+    statusCode: 500,
+  },
+  DATABASE_UPDATE_FAILED: {
+    message:
+      "Critical Error: Database update failed after successful transaction.",
+    action: "Please contact support immediately with your transaction details.",
     statusCode: 500,
   },
   NETWORK_ERROR: {

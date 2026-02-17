@@ -5,6 +5,7 @@ import { User } from "@prisma/client";
 
 import { comparePassword, hashPassword } from "@/lib/utils/hash";
 import { generateToken, TokenPayload } from "@/lib/utils/jwt";
+import { generateEncryptedWallet } from "@/server/blockchain/wallet";
 
 /**
  * User registration result
@@ -56,6 +57,9 @@ export async function registerUser(
   // Hash password
   const passwordHash = await hashPassword(password);
 
+  // Generate user wallet
+  const wallet = generateEncryptedWallet();
+
   // Create user
   const user = await prisma.user.create({
     data: {
@@ -63,6 +67,10 @@ export async function registerUser(
       email: email.toLowerCase(),
       passwordHash,
       fullName,
+      // Create user wallet
+      walletAddress: wallet.address,
+      walletPublicKey: wallet.publicKey,
+      privateKeyEncrypted: wallet.encryptedPrivateKey,
     },
   });
 
@@ -191,4 +199,40 @@ export async function updateUser(
   });
 
   return user;
+}
+
+/**
+ * Searches for users by name or email
+ *
+ * @param query - Search query
+ * @param limit - Max results (default 10)
+ * @returns Array of users (partial details)
+ */
+export async function searchUsers(
+  query: string,
+  limit: number = 10,
+): Promise<Partial<User>[]> {
+  if (!query || query.length < 2) return [];
+
+  const users = await prisma.user.findMany({
+    where: {
+      OR: [
+        { fullName: { contains: query, mode: "insensitive" } },
+        { email: { contains: query, mode: "insensitive" } },
+      ],
+    },
+    take: limit,
+    orderBy: { successRate: "desc" },
+    select: {
+      id: true,
+      email: true,
+      fullName: true,
+      successRate: true,
+      totalEscrows: true,
+      createdAt: true,
+      walletAddress: true, // Needed for frontend validation/display if we want
+    },
+  });
+
+  return users as unknown as Partial<User>[];
 }

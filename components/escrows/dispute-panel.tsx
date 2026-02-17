@@ -15,6 +15,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { ConfirmActionDialog } from "@/components/confirm-action-dialog";
+import { apiClient } from "@/lib/api-client";
 
 interface DisputePanelProps {
   escrow: any;
@@ -80,20 +81,16 @@ function ConcedeButton({ disputeId }: { disputeId: string }) {
   const handleConcede = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/disputes/${disputeId}/concede`, {
-        method: "POST",
-      });
+      await apiClient.concedeDispute(disputeId);
 
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || "Failed to concede");
-      }
+      // Toast is handled in apiClient now, but we can keep additional logic here if needed or let apiClient handle it.
+      // ApiClient toast says "Dispute conceded successfully"
 
-      toast.success("Dispute conceded successfully");
       router.refresh();
       setShowConfirm(false);
     } catch (error: any) {
-      toast.error(error.message);
+      // Error toast handled by apiClient mostly, but we can leave this catch block
+      // since apiClient throws.
     } finally {
       setLoading(false);
     }

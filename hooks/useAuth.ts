@@ -1,4 +1,5 @@
 import { useAuthStore, User } from "@/lib/store/auth.store";
+import { useDashboardStore } from "@/lib/store/dashboard.store";
 import { apiClient } from "@/lib/api-client";
 import { useRouter } from "next/navigation";
 
@@ -44,6 +45,7 @@ export function useAuth() {
   };
 
   const logout = async () => {
+    useDashboardStore.getState().clearDashboard(); // Clear cached dashboard data
     await apiClient.logout();
     clearUser();
     router.push("/login");

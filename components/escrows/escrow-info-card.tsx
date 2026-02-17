@@ -18,6 +18,7 @@ import {
   Calendar,
   CheckCircle2,
   Copy,
+  ExternalLink,
   Loader2,
 } from "lucide-react";
 import * as React from "react";
@@ -180,6 +181,7 @@ export function EscrowInfoCard({
                 Start Work
               </Button>
             )}
+
             {/* Buyer can still release if they want to bypass flow, or wait */}
             {isBuyer && (
               <Button
@@ -193,6 +195,7 @@ export function EscrowInfoCard({
                 Release Funds
               </Button>
             )}
+
             {isSeller && (
               <Button
                 variant="outline"
@@ -263,6 +266,53 @@ export function EscrowInfoCard({
               </div>
             )}
             {renderDisputeButton()}
+          </div>
+        );
+      case "verified":
+        return (
+          <div className="flex flex-col gap-3 w-full">
+            {isBuyer && (
+              <>
+                <div className="w-full text-center text-sm text-amber-700 dark:text-amber-400 font-medium border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/20 p-2 rounded">
+                  ⚠️ Once released, funds cannot be recovered
+                </div>
+                <Button
+                  onClick={() => setConfirmAction("release")}
+                  disabled={!!loadingAction}
+                  className="w-full bg-green-600 hover:bg-green-700 text-white h-12 text-base"
+                >
+                  {loadingAction === "release" && (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  )}
+                  💸 Release Funds to Seller
+                </Button>
+              </>
+            )}
+            {isSeller && (
+              <div className="flex-1 flex items-center justify-center text-sm text-muted-foreground border rounded-md px-3 py-3 bg-muted/50">
+                Work Approved ✅ — Waiting for Buyer to Release Funds
+              </div>
+            )}
+            {renderDisputeButton()}
+          </div>
+        );
+      case "released":
+        return (
+          <div className="flex flex-col gap-2 w-full">
+            <div className="w-full text-center text-sm text-emerald-700 dark:text-emerald-400 font-medium border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/20 p-3 rounded">
+              ✅ Funds successfully released!
+            </div>
+            {escrow.txHash && (
+              <a
+                href={`https://blockchair.com/bitcoin-cash/transaction/${escrow.txHash}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center justify-center gap-2 text-sm text-emerald-700 dark:text-emerald-400 hover:underline font-medium"
+              >
+                <ExternalLink className="h-3.5 w-3.5" />
+                View Transaction on Blockchain
+              </a>
+            )}
           </div>
         );
       case "disputed":

@@ -1,6 +1,6 @@
 import { config } from "@/config";
-import { AppError } from "@/lib/errors/AppError";
 import { prisma } from "@/lib/db/prisma";
+import { AppError } from "@/lib/errors/AppError";
 import { generateId } from "@/lib/utils/id";
 import {
   DisputeStatus,
@@ -9,7 +9,7 @@ import {
   Prisma,
   Transaction,
   TransactionDirection,
-  User
+  User,
 } from "@prisma/client";
 
 import {
@@ -19,9 +19,8 @@ import {
   getAddressTransactions,
 } from "@/server/blockchain/bch";
 import {
-  createEscrowWallet,
   decryptPrivateKey,
-  generateWallet,
+  generateEncryptedWallet,
 } from "@/server/blockchain/wallet";
 
 import { submitTaskWithRetry } from "@/services/agent.service";
@@ -39,10 +38,20 @@ const ALLOWED_TRANSITIONS: Map<EscrowStatus, EscrowStatus[]> = new Map([
   // CREATED -> AWAITING_FUNDING
   [EscrowStatus.CREATED, [EscrowStatus.AWAITING_FUNDING]],
 
-  // AWAITING_FUNDING -> FUNDED | CANCELLED | EXPIRED
+  // AWAITING_FUNDING -> FUNDING_IN_PROGRESS | CANCELLED | EXPIRED
   [
     EscrowStatus.AWAITING_FUNDING,
-    [EscrowStatus.FUNDED, EscrowStatus.CANCELLED, EscrowStatus.EXPIRED],
+    [
+      EscrowStatus.FUNDING_IN_PROGRESS,
+      EscrowStatus.CANCELLED,
+      EscrowStatus.EXPIRED,
+    ],
+  ],
+
+  // FUNDING_IN_PROGRESS -> FUNDED | AWAITING_FUNDING (retry)
+  [
+    EscrowStatus.FUNDING_IN_PROGRESS,
+    [EscrowStatus.FUNDED, EscrowStatus.AWAITING_FUNDING],
   ],
 
   // FUNDED -> IN_PROGRESS | DISPUTED
@@ -234,19 +243,190 @@ async function triggerSubmittedSideEffects(escrow: Escrow): Promise<void> {
 }
 
 /**
+ * Buyer approves submitted work
+ * Status transition: SUBMITTED → VERIFIED
+ * Authorization: Buyer only
+ */
+export async function buyerApproveWork(
+  escrowId: string,
+  buyerId: string,
+): Promise<Escrow> {
+  return await prisma.$transaction(async (tx) => {
+    const escrow = await tx.escrow.findFirst({
+      where: { OR: [{ escrowId }, { id: escrowId }] },
+    });
+
+    if (!escrow) {
+      throw new AppError("ESCROW_NOT_FOUND");
+    }
+
+    if (escrow.buyerUserId !== buyerId) {
+      throw new AppError("FORBIDDEN", {
+        message: "Only the buyer can approve work",
+      });
+    }
+
+    if (escrow.status !== EscrowStatus.SUBMITTED) {
+      throw new AppError("INVALID_STATE_TRANSITION", {
+        message: "Can only approve work when SUBMITTED",
+        currentStatus: escrow.status,
+      });
+    }
+
+    // Get AI recommendation (if exists)
+    const aiVerification = await tx.aiVerification.findFirst({
+      where: { escrowId: escrow.id },
+      orderBy: { createdAt: "desc" },
+    });
+
+    // Transition to VERIFIED
+    const verified = await transitionEscrow(
+      escrow.id,
+      EscrowStatus.VERIFIED,
+      buyerId,
+      {
+        method: "buyerApproveWork",
+        approvedAt: new Date(),
+        aiRecommendation: aiVerification?.recommendation || "none",
+        aiConfidence: aiVerification?.confidence || 0,
+      },
+      tx,
+    );
+
+    // Notify seller
+    await NotificationService.createNotification(
+      escrow.sellerUserId,
+      NotificationType.WORK_VERIFIED,
+      `✅ Your work for Escrow ${escrow.escrowId} has been approved! Funds will be released shortly.`,
+      escrow.id,
+    );
+
+    return verified;
+  });
+}
+
+/**
+ * Buyer requests revision or disputes work
+ * Status transition: SUBMITTED → IN_PROGRESS (for revision) or SUBMITTED → DISPUTED
+ */
+export async function buyerRequestRevision(
+  escrowId: string,
+  buyerId: string,
+  feedback: string,
+): Promise<Escrow> {
+  return await prisma.$transaction(async (tx) => {
+    const escrow = await tx.escrow.findFirst({
+      where: { OR: [{ escrowId }, { id: escrowId }] },
+    });
+
+    if (!escrow) {
+      throw new AppError("ESCROW_NOT_FOUND");
+    }
+
+    if (escrow.buyerUserId !== buyerId) {
+      throw new AppError("FORBIDDEN", {
+        message: "Only the buyer can request revisions",
+      });
+    }
+
+    if (escrow.status !== EscrowStatus.SUBMITTED) {
+      throw new AppError("INVALID_STATE_TRANSITION", {
+        message: "Can only request revision when work is SUBMITTED",
+        currentStatus: escrow.status,
+      });
+    }
+
+    // Transition back to IN_PROGRESS
+    const revised = await transitionEscrow(
+      escrow.id,
+      EscrowStatus.IN_PROGRESS,
+      buyerId,
+      {
+        method: "buyerRequestRevision",
+        feedback,
+        requestedAt: new Date(),
+      },
+      tx,
+    );
+
+    // Notify seller with feedback
+    await NotificationService.createNotification(
+      escrow.sellerUserId,
+      NotificationType.REVISION_REQUESTED,
+      `📝 Buyer requested revisions for Escrow ${escrow.escrowId}: ${feedback}`,
+      escrow.id,
+    );
+
+    return revised;
+  });
+}
+
+/**
+ * Buyer opens a dispute
+ * Status transition: SUBMITTED/VERIFIED/IN_PROGRESS -> DISPUTED
+ */
+export async function buyerOpenDispute(
+  escrowId: string,
+  buyerId: string,
+  reason: string,
+): Promise<Escrow> {
+  return await prisma.$transaction(async (tx) => {
+    const escrow = await tx.escrow.findUnique({
+      where: { id: escrowId },
+    });
+
+    if (!escrow) {
+      throw new AppError("ESCROW_NOT_FOUND", { message: "Escrow not found" });
+    }
+
+    if (escrow.buyerUserId !== buyerId) {
+      throw new AppError("FORBIDDEN", {
+        message: "Only the buyer can open a dispute",
+      });
+    }
+
+    // Transition to DISPUTED
+    const disputed = await transitionEscrow(
+      escrow.id,
+      EscrowStatus.DISPUTED,
+      buyerId,
+      {
+        method: "buyerOpenDispute",
+        reason,
+        disputedAt: new Date(),
+      },
+      tx,
+    );
+
+    // Notify seller
+    await NotificationService.createNotification(
+      escrow.sellerUserId,
+      NotificationType.DISPUTE_OPENED,
+      `⚠️ Dispute opened for Escrow ${escrow.escrowId}: ${reason}`,
+      escrow.id,
+    );
+
+    // Notify admins (optional/TODO)
+
+    return disputed;
+  });
+}
+
+/**
  * Trigger side effects for VERIFIED state
  */
 async function triggerVerifiedSideEffects(escrow: Escrow): Promise<void> {
   try {
     console.log(
-      `[Side Effect - VERIFIED] Preparing payout for escrow ${escrow.escrowId}`,
+      `[Side Effect - VERIFIED] Buyer approved work for escrow ${escrow.escrowId}`,
     );
 
-    // Log payout preparation
-    // In production, this might initiate actual payout pre-approval
+    // Funds will be released when buyer explicitly clicks "Release Funds"
+    // or automatically after a grace period (if implemented)
+
+    // This is just logging that verification (buyer approval) happened
     console.log(
-      `[Payout] Escrow ${escrow.escrowId} verified and ready for release. ` +
-        `Amount: ${escrow.amountBCH} BCH`,
+      `[Side Effect - VERIFIED] Escrow ${escrow.escrowId} ready for release`,
     );
   } catch (error) {
     console.error("[Side Effect - VERIFIED] Error:", error);
@@ -298,6 +478,46 @@ async function triggerReleasedSideEffects(escrow: Escrow): Promise<void> {
     console.log(
       `[Completion] Escrow ${escrow.escrowId} successfully released and marked complete`,
     );
+
+    // Post-release balance verification (async, non-blocking)
+    (async () => {
+      try {
+        // Wait 5 seconds for transaction to propagate
+        await new Promise((resolve) => setTimeout(resolve, 5000));
+
+        const seller = await prisma.user.findUnique({
+          where: { id: escrow.sellerUserId },
+          select: { walletAddress: true, email: true },
+        });
+
+        if (seller?.walletAddress) {
+          const sellerBalance = await getAddressBalance(seller.walletAddress);
+
+          console.log("━".repeat(80));
+          console.log("💰 POST-RELEASE BALANCE CHECK");
+          console.log("━".repeat(80));
+          console.log("   Seller email:", seller.email);
+          console.log("   Seller wallet:", seller.walletAddress);
+          console.log(
+            "   Seller balance after release:",
+            sellerBalance.balance,
+            "BCH",
+          );
+          if (escrow.txHash) {
+            console.log(
+              "   Explorer: https://blockchair.com/bitcoin-cash/transaction/" +
+                escrow.txHash,
+            );
+          }
+          console.log("━".repeat(80));
+        }
+      } catch (balanceError) {
+        console.error(
+          "[Side Effect - RELEASED] Post-release balance check failed:",
+          balanceError,
+        );
+      }
+    })();
   } catch (error) {
     console.error("[Side Effect - RELEASED] Error:", error);
   }
@@ -318,7 +538,8 @@ async function triggerDisputedSideEffects(escrow: Escrow): Promise<void> {
         `Manual resolution required.`,
     );
 
-    // In production, might send notifications to admins
+    // Notification is handled by the openDispute or transition caller to allow custom messages
+    // This side effect ensures system consistency if state is changed via other means
   } catch (error) {
     console.error("[Side Effect - DISPUTED] Error:", error);
   }
@@ -460,6 +681,12 @@ export async function transitionEscrow(
       });
       break;
 
+    case EscrowStatus.REFUNDED:
+      triggerRefundedSideEffects(updatedEscrow).catch((error) => {
+        console.error("[State Machine] REFUNDED side effects failed:", error);
+      });
+      break;
+
     case EscrowStatus.DISPUTED:
       triggerDisputedSideEffects(updatedEscrow).catch((error) => {
         console.error("[State Machine] DISPUTED side effects failed:", error);
@@ -475,7 +702,8 @@ export type EscrowWithDetails = Escrow & {
   buyer?: User;
   seller?: User;
   transactions?: Transaction[];
-  disputes?: any[]; // Avoiding circular dependency for now
+  disputes?: any[];
+  stateTransitions?: any[];
 };
 
 /**
@@ -537,7 +765,8 @@ export async function createEscrow(
   }
 
   // Generate BCH wallet for this escrow
-  const { address: escrowAddress, encryptedPrivateKey } = createEscrowWallet();
+  const { address: escrowAddress, encryptedPrivateKey } =
+    generateEncryptedWallet();
 
   // Generate human-readable escrow ID
   const escrowId = generateEscrowId();
@@ -582,6 +811,236 @@ export async function createEscrow(
       createdAt: escrow.createdAt,
     },
   };
+}
+
+/**
+ * Fund escrow from buyer's internal wallet
+ *
+ * @param escrowId - Escrow ID
+ * @param userId - User ID (must be buyer)
+ */
+export async function fundEscrowFromWallet(
+  escrowId: string,
+  userId: string,
+): Promise<Escrow> {
+  const escrow = await getEscrow(escrowId, userId);
+
+  if (!escrow) {
+    throw new AppError("ESCROW_NOT_FOUND", { escrowId });
+  }
+
+  // Verify user is buyer
+  if (escrow.buyerUserId !== userId) {
+    throw new AppError("UNAUTHORIZED", {
+      message: "Only buyer can fund escrow",
+    });
+  }
+
+  // Verify status
+  if (
+    escrow.status !== EscrowStatus.AWAITING_FUNDING &&
+    escrow.status !== EscrowStatus.PENDING
+  ) {
+    throw new AppError("INVALID_STATE_TRANSITION", {
+      message: `Cannot fund escrow in ${escrow.status} state`,
+      currentStatus: escrow.status,
+    });
+  }
+
+  // Get buyer with wallet secrets
+  const buyer = await prisma.user.findUnique({
+    where: { id: userId },
+  });
+
+  if (!buyer || !buyer.walletAddress || !buyer.privateKeyEncrypted) {
+    throw new AppError("WALLET_NOT_FOUND", {
+      message: "Buyer wallet not configured",
+    });
+  }
+
+  // Check balance (optional optimization, since createTransaction also checks)
+  const balance = await getAddressBalance(buyer.walletAddress);
+  if (balance.confirmed < escrow.amountBCH) {
+    throw new AppError("INSUFFICIENT_FUNDS", {
+      required: escrow.amountBCH,
+      available: balance.confirmed,
+    });
+  }
+
+  // Decrypt private key
+  const privateKey = decryptPrivateKey(buyer.privateKeyEncrypted);
+
+  // Create Transaction: Buyer Wallet -> Escrow Wallet
+  let txId: string;
+  try {
+    console.log(`[FundEscrow] Creating transaction...`);
+    txId = await createTransaction(
+      buyer.walletAddress,
+      escrow.escrowAddress,
+      escrow.amountBCH,
+      privateKey,
+    );
+    console.log(`[FundEscrow] Transaction created successfully.`);
+  } catch (error: any) {
+    console.error(`[FundEscrow] Tx creation failed:`, error);
+    throw new AppError("PAYMENT_FAILED", {
+      message: "Failed to create funding transaction",
+      details: error.message,
+    });
+  }
+
+  // ============================================================================
+  // CRITICAL SECTION: Broadcast and immediately save to database
+  // ============================================================================
+  let txHash: string;
+
+  try {
+    console.log(`[FundEscrow] Broadcasting transaction...`);
+    txHash = await broadcastTransaction(txId);
+    console.log(`[FundEscrow] ✅ Broadcast successful. TxHash: ${txHash}`);
+  } catch (error: any) {
+    console.error(`[FundEscrow] ❌ Broadcast failed:`, error);
+    throw new AppError("PAYMENT_FAILED", {
+      message: "Failed to broadcast transaction",
+      details: error.message,
+    });
+  }
+
+  // IMMEDIATELY save txHash to database (in a transaction for atomicity)
+  let updatedEscrow: Escrow;
+
+  try {
+    updatedEscrow = await prisma.$transaction(
+      async (tx) => {
+        // 1. Save txHash immediately
+        await tx.escrow.update({
+          where: { id: escrow.id },
+          data: { txHash: txHash },
+        });
+
+        // 2. Transition to FUNDING_IN_PROGRESS
+        const transitioned = await transitionEscrow(
+          escrow.id,
+          EscrowStatus.FUNDING_IN_PROGRESS,
+          userId,
+          {
+            method: "fundEscrowFromWallet",
+            txHash,
+            step: "BROADCAST_COMPLETE",
+          },
+          tx,
+        );
+
+        // 3. Record Transaction immediately
+        await tx.transaction.create({
+          data: {
+            id: generateId(),
+            escrowId: escrow.id,
+            txHash,
+            amountBCH: escrow.amountBCH,
+            confirmations: 0,
+            direction: TransactionDirection.INBOUND,
+            createdAt: new Date(),
+          },
+        });
+
+        return transitioned;
+      },
+      {
+        timeout: 15000, // 15 second timeout for DB operations
+      },
+    );
+
+    console.log(`[FundEscrow] ✅ Database updated with txHash: ${txHash}`);
+    console.log(`[FundEscrow] ✅ Escrow transitioned to FUNDING_IN_PROGRESS`);
+  } catch (dbError: any) {
+    // Database update failed after broadcast - LOG CRITICALLY
+    console.error("━".repeat(80));
+    console.error(
+      "🚨 CRITICAL ERROR: Transaction broadcasted but DB update failed!",
+    );
+    console.error("━".repeat(80));
+    console.error("Escrow ID:", escrow.id);
+    console.error("Transaction Hash:", txHash);
+    console.error("User ID:", userId);
+    console.error("Amount:", escrow.amountBCH, "BCH");
+    console.error("Error:", dbError);
+    console.error("━".repeat(80));
+    console.error(
+      "⚠️  MANUAL RECOVERY NEEDED - Transaction is on blockchain but not in DB",
+    );
+    console.error("━".repeat(80));
+
+    // Return a special error that includes the txHash for manual recovery
+    throw new AppError("DATABASE_UPDATE_FAILED", {
+      message:
+        "Transaction sent successfully but database update failed. Please contact support.",
+      txHash: txHash,
+      escrowId: escrow.id,
+      requiresManualRecovery: true,
+    });
+  }
+
+  // ============================================================================
+  // MONITORING SECTION: This can fail without losing funds
+  // ============================================================================
+
+  // Monitor for transaction (this can fail safely)
+  const { waitForTransactionInMempool } =
+    await import("@/lib/bch/transaction-monitor");
+
+  try {
+    console.log(`[FundEscrow] Monitoring for transaction ${txHash}...`);
+    await waitForTransactionInMempool(
+      escrow.escrowAddress,
+      txHash,
+      escrow.amountBCH,
+    );
+    console.log(`[FundEscrow] ✅ Transaction verified on-chain (or mempool).`);
+  } catch (monitorError: any) {
+    console.error(`[FundEscrow] ⚠️  Monitoring timeout/error:`, monitorError);
+
+    // Monitoring failed, but transaction is already recorded in DB
+    if (monitorError.code === "TRANSACTION_TIMEOUT") {
+      console.warn(
+        `[FundEscrow] Transaction ${txHash} not detected yet, but it's recorded in DB.`,
+      );
+      console.warn(`[FundEscrow] Background job will verify it later.`);
+      return updatedEscrow;
+    }
+
+    // For other errors, also just log and return
+    console.error(`[FundEscrow] Monitoring error (non-fatal):`, monitorError);
+    return updatedEscrow;
+  }
+
+  // If verified, transition to FUNDED
+  try {
+    const fundedEscrow = await transitionEscrow(
+      escrow.id,
+      EscrowStatus.FUNDED,
+      userId,
+      {
+        method: "fundEscrowFromWallet",
+        txHash,
+        confirmations: 0,
+        amountBCH: escrow.amountBCH,
+        verified: true,
+      },
+    );
+
+    console.log(`[FundEscrow] ✅ Escrow ${escrow.id} transitioned to FUNDED.`);
+    return fundedEscrow;
+  } catch (transitionError: any) {
+    console.error(
+      `[FundEscrow] Failed to transition to FUNDED:`,
+      transitionError,
+    );
+    console.warn(
+      `[FundEscrow] Escrow remains in FUNDING_IN_PROGRESS. Background job will complete.`,
+    );
+    return updatedEscrow;
+  }
 }
 
 /**
@@ -633,6 +1092,11 @@ export async function cancelEscrow(
 }
 
 /**
+ * Escrow creation result
+ */
+// ... (skip to getEscrow)
+
+/**
  * Gets escrow by ID with authorization check
  *
  * @param escrowId - Escrow ID or MongoDB _id
@@ -646,7 +1110,14 @@ export async function getEscrow(
   // Try to find by escrowId first, then by id
   const escrow1 = await prisma.escrow.findUnique({
     where: { escrowId },
-    include: { buyer: true, seller: true, disputes: true },
+    include: {
+      buyer: true,
+      seller: true,
+      disputes: true,
+      stateTransitions: {
+        orderBy: { timestamp: "desc" },
+      },
+    },
   });
 
   let escrow = escrow1;
@@ -654,7 +1125,14 @@ export async function getEscrow(
   if (!escrow) {
     escrow = await prisma.escrow.findUnique({
       where: { id: escrowId },
-      include: { buyer: true, seller: true, disputes: true },
+      include: {
+        buyer: true,
+        seller: true,
+        disputes: true,
+        stateTransitions: {
+          orderBy: { timestamp: "desc" },
+        },
+      },
     });
   }
 
@@ -739,7 +1217,7 @@ export async function checkEscrowFunding(
   const balance = await getAddressBalance(escrow.escrowAddress);
 
   // Check if funded with required amount
-  if (balance.confirmed >= escrow.amountBCH) {
+  if (balance.balance >= escrow.amountBCH) {
     // Get transactions to record the funding tx
     const transactions = await getAddressTransactions(escrow.escrowAddress);
 
@@ -785,6 +1263,260 @@ export async function checkEscrowFunding(
 
   return escrow;
 }
+/**
+ * Funds an escrow from the user's permanent wallet
+ * Authorization: User must be the buyer
+ *
+ * @param escrowId - Escrow ID
+ * @param userId - User ID (Buyer)
+ * @returns Updated Escrow
+ */
+export async function fundEscrowFromUserWallet(
+  escrowId: string,
+  userId: string,
+): Promise<Escrow> {
+  // Get escrow (OUTSIDE transaction for initial validation)
+  const escrow = await getEscrow(escrowId, userId);
+  if (!escrow) {
+    throw new AppError("ESCROW_NOT_FOUND", { escrowId });
+  }
+
+  // Check auth
+  if (escrow.buyerUserId !== userId) {
+    throw new AppError("FORBIDDEN", {
+      message: "Only the buyer can fund this escrow",
+    });
+  }
+
+  // Check state
+  if (
+    escrow.status !== EscrowStatus.AWAITING_FUNDING &&
+    escrow.status !== EscrowStatus.PENDING
+  ) {
+    throw new AppError("INVALID_STATE_TRANSITION", {
+      message: "Escrow is not awaiting funding",
+      currentStatus: escrow.status,
+    });
+  }
+
+  // Get User with wallet info
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (
+    !user ||
+    !user.walletAddress ||
+    !user.privateKeyEncrypted ||
+    !user.walletPublicKey
+  ) {
+    throw new AppError("WALLET_NOT_FOUND", {
+      message: "User wallet not set up",
+    });
+  }
+
+  // Check User Wallet Balance
+  const balance = await getAddressBalance(user.walletAddress);
+  const requiredAmount = escrow.amountBCH + config.escrow.minerFeeBuffer;
+
+  console.log(`[FundEscrow] Attempting to fund escrow ${escrow.id}`);
+  console.log(`[FundEscrow] User Wallet: ${user.walletAddress}`);
+  console.log(`[FundEscrow] User Balance: ${balance.balance} BCH`);
+  console.log(`[FundEscrow] Required: ${requiredAmount} BCH`);
+
+  if (balance.balance < requiredAmount) {
+    console.error(
+      `[FundEscrow] Insufficient funds. Balance: ${balance.balance}, Required: ${requiredAmount}`,
+    );
+    throw new AppError("INSUFFICIENT_FUNDS", {
+      message: "Insufficient funds in user wallet",
+      required: requiredAmount,
+      available: balance.balance,
+    });
+  }
+
+  // Decrypt User Key
+  const userPrivateKey = decryptPrivateKey(user.privateKeyEncrypted);
+
+  // Create Transaction: User Wallet -> Escrow Wallet
+  let rawTx: string;
+  try {
+    console.log(`[FundEscrow] Creating transaction...`);
+    rawTx = await createTransaction(
+      user.walletAddress,
+      escrow.escrowAddress,
+      escrow.amountBCH,
+      userPrivateKey,
+    );
+    console.log(`[FundEscrow] Transaction created successfully.`);
+  } catch (error: any) {
+    console.error(`[FundEscrow] Tx creation failed:`, error);
+    throw new AppError("PAYMENT_FAILED", {
+      message: "Failed to create funding transaction",
+      details: error.message,
+    });
+  }
+
+  // ============================================================================
+  // CRITICAL SECTION: Broadcast and immediately save to database
+  // ============================================================================
+  let txHash: string;
+
+  try {
+    console.log(`[FundEscrow] Broadcasting transaction...`);
+    txHash = await broadcastTransaction(rawTx);
+    console.log(`[FundEscrow] ✅ Broadcast successful. TxHash: ${txHash}`);
+  } catch (error: any) {
+    console.error(`[FundEscrow] ❌ Broadcast failed:`, error);
+    throw new AppError("PAYMENT_FAILED", {
+      message: "Failed to broadcast transaction",
+      details: error.message,
+    });
+  }
+
+  // IMMEDIATELY save txHash to database (in a transaction for atomicity)
+  // This ensures we NEVER lose track of a broadcasted transaction
+  let updatedEscrow: Escrow;
+
+  try {
+    updatedEscrow = await prisma.$transaction(
+      async (tx) => {
+        // 1. Save txHash immediately
+        await tx.escrow.update({
+          where: { id: escrow.id },
+          data: { txHash: txHash },
+        });
+
+        // 2. Transition to FUNDING_IN_PROGRESS
+        const transitioned = await transitionEscrow(
+          escrow.id,
+          EscrowStatus.FUNDING_IN_PROGRESS,
+          userId,
+          {
+            method: "fundEscrowFromUserWallet",
+            txHash,
+            step: "BROADCAST_COMPLETE",
+          },
+          tx,
+        );
+
+        // 3. Record Transaction immediately
+        await tx.transaction.create({
+          data: {
+            id: generateId(),
+            escrowId: escrow.id,
+            txHash,
+            amountBCH: escrow.amountBCH,
+            confirmations: 0,
+            direction: TransactionDirection.INBOUND,
+            createdAt: new Date(),
+          },
+        });
+
+        return transitioned;
+      },
+      {
+        timeout: 15000, // 15 second timeout for DB operations
+      },
+    );
+
+    console.log(`[FundEscrow] ✅ Database updated with txHash: ${txHash}`);
+    console.log(`[FundEscrow] ✅ Escrow transitioned to FUNDING_IN_PROGRESS`);
+  } catch (dbError: any) {
+    // Database update failed after broadcast - LOG CRITICALLY
+    console.error("━".repeat(80));
+    console.error(
+      "🚨 CRITICAL ERROR: Transaction broadcasted but DB update failed!",
+    );
+    console.error("━".repeat(80));
+    console.error("Escrow ID:", escrow.id);
+    console.error("Transaction Hash:", txHash);
+    console.error("User ID:", userId);
+    console.error("Amount:", escrow.amountBCH, "BCH");
+    console.error("Error:", dbError);
+    console.error("━".repeat(80));
+    console.error(
+      "⚠️  MANUAL RECOVERY NEEDED - Transaction is on blockchain but not in DB",
+    );
+    console.error("━".repeat(80));
+
+    // Return a special error that includes the txHash for manual recovery
+    throw new AppError("DATABASE_UPDATE_FAILED", {
+      message:
+        "Transaction sent successfully but database update failed. Please contact support.",
+      txHash: txHash,
+      escrowId: escrow.id,
+      requiresManualRecovery: true,
+    });
+  }
+
+  // ============================================================================
+  // MONITORING SECTION: This can fail without losing funds
+  // ============================================================================
+
+  // Now monitor for transaction (this can fail safely)
+  const { waitForTransactionInMempool } =
+    await import("@/lib/bch/transaction-monitor");
+
+  try {
+    console.log(`[FundEscrow] Monitoring for transaction ${txHash}...`);
+    await waitForTransactionInMempool(
+      escrow.escrowAddress,
+      txHash,
+      escrow.amountBCH,
+    );
+    console.log(`[FundEscrow] ✅ Transaction verified on-chain (or mempool).`);
+  } catch (monitorError: any) {
+    console.error(`[FundEscrow] ⚠️  Monitoring timeout/error:`, monitorError);
+
+    // Monitoring failed, but transaction is already recorded in DB
+    // Don't throw error - just log and continue
+    // The background job will pick it up
+
+    if (monitorError.code === "TRANSACTION_TIMEOUT") {
+      console.warn(
+        `[FundEscrow] Transaction ${txHash} not detected yet, but it's recorded in DB.`,
+      );
+      console.warn(`[FundEscrow] Background job will verify it later.`);
+
+      // Return the escrow in FUNDING_IN_PROGRESS state
+      // User should see a message like "Transaction broadcasted, awaiting confirmation"
+      return updatedEscrow;
+    }
+
+    // For other errors, also just log and return
+    console.error(`[FundEscrow] Monitoring error (non-fatal):`, monitorError);
+    return updatedEscrow;
+  }
+
+  // If monitoring succeeded, transition to FUNDED
+  try {
+    const fundedEscrow = await transitionEscrow(
+      escrow.id,
+      EscrowStatus.FUNDED,
+      userId,
+      {
+        method: "fundEscrowFromUserWallet",
+        txHash,
+        confirmations: 0,
+        amountBCH: escrow.amountBCH,
+        verified: true,
+      },
+    );
+
+    console.log(`[FundEscrow] ✅ Escrow ${escrow.id} transitioned to FUNDED.`);
+    return fundedEscrow;
+  } catch (transitionError: any) {
+    console.error(
+      `[FundEscrow] Failed to transition to FUNDED:`,
+      transitionError,
+    );
+
+    // Transaction is recorded, just not marked as FUNDED yet
+    // Background job will handle this
+    console.warn(
+      `[FundEscrow] Escrow remains in FUNDING_IN_PROGRESS. Background job will complete.`,
+    );
+    return updatedEscrow;
+  }
+}
 
 /**
  * Releases escrow funds to seller
@@ -800,14 +1532,22 @@ export async function checkEscrowFunding(
  * Internal helper for releasing escrow
  * Can be reused in other transactions (e.g., dispute resolution)
  */
-export async function _releaseEscrow(
+export async function processEscrowRelease(
   escrowId: string,
   userId: string, // User initiating (buyer or admin/system)
   tx: Prisma.TransactionClient,
 ): Promise<Escrow> {
-  // Find escrow
+  console.log("━".repeat(80));
+  console.log("💸 ESCROW RELEASE STARTED");
+  console.log("━".repeat(80));
+  console.log("Escrow ID:", escrowId);
+  console.log("Initiated by:", userId);
+  console.log("Timestamp:", new Date().toISOString());
+  console.log("━".repeat(80));
+
+  // Step 1: Find escrow
   const escrow = await tx.escrow.findFirst({
-    where: { OR: [{ escrowId }, { id: escrowId }] }, // Flexible finding
+    where: { OR: [{ escrowId }, { id: escrowId }] },
     include: { seller: true },
   });
 
@@ -815,8 +1555,16 @@ export async function _releaseEscrow(
     throw new AppError("ESCROW_NOT_FOUND");
   }
 
+  console.log("✅ Step 1: Escrow found");
+  console.log("   Escrow DB ID:", escrow.id);
+  console.log("   Escrow Public ID:", escrow.escrowId);
+  console.log("   Current Status:", escrow.status);
+  console.log("   Escrow Address:", escrow.escrowAddress);
+  console.log("   Amount BCH:", escrow.amountBCH);
+  console.log("   Seller User ID:", escrow.sellerUserId);
+
   // NOTE: Authorization check moved to caller or specific logic
-  // _releaseEscrow assumes authorization is handled or it's a system action
+  // processEscrowRelease assumes authorization is handled or it's a system action
 
   // Must be funded or later state
   if (
@@ -840,7 +1588,7 @@ export async function _releaseEscrow(
       EscrowStatus.IN_PROGRESS,
       userId,
       {
-        method: "_releaseEscrow",
+        method: "processEscrowRelease",
         auto: true,
       },
       tx,
@@ -853,7 +1601,7 @@ export async function _releaseEscrow(
       EscrowStatus.SUBMITTED,
       userId,
       {
-        method: "_releaseEscrow",
+        method: "processEscrowRelease",
         auto: true,
       },
       tx,
@@ -866,7 +1614,7 @@ export async function _releaseEscrow(
       EscrowStatus.VERIFIED,
       userId,
       {
-        method: "_releaseEscrow",
+        method: "processEscrowRelease",
         auto: true,
       },
       tx,
@@ -881,8 +1629,7 @@ export async function _releaseEscrow(
     });
   }
 
-  // Check for active disputes - using service check (which is read-only)
-  // Since we are in a transaction, we should check DB directly
+  // Check for active disputes
   const dispute = await tx.dispute.findFirst({
     where: {
       escrowId: currentEscrow.id,
@@ -896,28 +1643,51 @@ export async function _releaseEscrow(
     });
   }
 
-  // Get seller's BCH address (for MVP, generate temporary address)
-  const sellerWallet = generateWallet();
+  // Step 2: Verify seller wallet
+  if (!(currentEscrow as any).seller) {
+    currentEscrow = (await tx.escrow.findUnique({
+      where: { id: currentEscrow.id },
+      include: { seller: true },
+    })) as Escrow;
+  }
 
-  // Decrypt escrow private key
-  const privateKey = decryptPrivateKey(currentEscrow.privateKeyEncrypted);
+  const sellerWallet = (currentEscrow as any).seller?.walletAddress;
 
-  // FETCH ACTUAL BALANCE
+  console.log("✅ Step 2: Checking seller wallet");
+  console.log("   Seller wallet address:", sellerWallet || "❌ NOT FOUND");
+
+  if (!sellerWallet) {
+    throw new AppError("WALLET_NOT_FOUND", {
+      message: "Seller wallet not set up. Cannot release funds.",
+    });
+  }
+
+  const sellerAddress = sellerWallet;
+
+  // Step 3: Check escrow balance
+  console.log("✅ Step 3: Fetching escrow wallet balance...");
   const balance = await getAddressBalance(currentEscrow.escrowAddress);
-  // Use the total balance available to sweep the wallet
-  // We prefer confirmed, but if there's unconfirmed change from our own txs, we might need it?
-  // Actually, safe bet is 'balance.balance' which is confirmed + unconfirmed.
-  // But strictly, we should only spend confirmed if we want to avoid deeper chains or risk.
-  // However, checkEscrowFunding ensures we have enough confirmed.
-  // So 'balance.confirmed' should be >= escrow.amountBCH.
-  // If we have extra dust, let's try to sweep it too.
-  const availableBCH = balance.balance;
 
-  // Deduct miner fee buffer from available balance
+  console.log("━".repeat(40));
+  console.log("💰 ESCROW WALLET BALANCE:");
+  console.log("   Address:", currentEscrow.escrowAddress);
+  console.log("   Confirmed:", balance.confirmed, "BCH");
+  console.log("   Unconfirmed:", balance.unconfirmed, "BCH");
+  console.log("   Total:", balance.balance, "BCH");
+  console.log("   Required (escrow amount):", currentEscrow.amountBCH, "BCH");
+  console.log("   Miner fee buffer:", config.escrow.minerFeeBuffer, "BCH");
+  console.log("━".repeat(40));
+
+  const availableBCH = balance.balance;
   const minerFeeBCH = config.escrow.minerFeeBuffer;
   const amountToSend = availableBCH - minerFeeBCH;
 
+  console.log("   Amount to send to seller:", amountToSend, "BCH");
+
   if (amountToSend <= 0) {
+    console.error("❌ INSUFFICIENT FUNDS IN ESCROW WALLET");
+    console.error("   Available:", availableBCH, "BCH");
+    console.error("   Fee buffer:", minerFeeBCH, "BCH");
     throw new AppError("INSUFFICIENT_FUNDS", {
       message: `Escrow wallet balance (${availableBCH}) too small to cover fees`,
       available: availableBCH,
@@ -925,35 +1695,60 @@ export async function _releaseEscrow(
     });
   }
 
-  // Create and broadcast transaction
-  let rawTx;
+  // Step 4: Decrypt private key
+  console.log("✅ Step 4: Decrypting escrow private key...");
+  const privateKey = decryptPrivateKey(currentEscrow.privateKeyEncrypted);
+  console.log("   Private key decrypted successfully ✅");
+
+  // Step 5: Create transaction
+  console.log("✅ Step 5: Creating blockchain transaction...");
+  console.log("   FROM:", currentEscrow.escrowAddress);
+  console.log("   TO:", sellerAddress);
+  console.log("   AMOUNT:", amountToSend, "BCH");
+
+  let rawTx: string;
   try {
     rawTx = await createTransaction(
       currentEscrow.escrowAddress,
-      sellerWallet.address,
+      sellerAddress,
       amountToSend,
       privateKey,
     );
+    console.log("   Transaction created successfully ✅");
+    console.log("   Raw TX length:", rawTx.length, "chars");
   } catch (error: any) {
-    console.error(
-      `[Release] Transaction creation failed for escrow ${currentEscrow.id}.`,
-      `Address: ${currentEscrow.escrowAddress}`,
-      `Available (Chain): ${availableBCH}`,
-      `Amount To Send: ${amountToSend}`,
-      `Error: ${error.message}`,
-      `Metadata:`,
-      error.metadata || "none",
-    );
+    console.error("❌ Step 5 FAILED: Transaction creation error");
+    console.error("   Error:", error.message);
+    console.error("   Metadata:", error.metadata || "none");
     throw new AppError("PAYMENT_FAILED", {
-      message: `Payment failed for address ${currentEscrow.escrowAddress}. Details: ${error.message} (Available: ${availableBCH})`,
+      message: `Failed to create release transaction: ${error.message}`,
       originalError: error.message,
       metadata: error.metadata,
     });
   }
 
-  const txHash = await broadcastTransaction(rawTx);
+  // Step 6: Broadcast transaction
+  console.log("✅ Step 6: Broadcasting transaction to BCH network...");
+  let txHash: string;
+  try {
+    txHash = await broadcastTransaction(rawTx);
+    console.log("━".repeat(40));
+    console.log("🚀 TRANSACTION BROADCAST SUCCESSFUL!");
+    console.log("   TX Hash:", txHash);
+    console.log(
+      "   Explorer: https://blockchair.com/bitcoin-cash/transaction/" + txHash,
+    );
+    console.log("━".repeat(40));
+  } catch (error: any) {
+    console.error("❌ Step 6 FAILED: Broadcast error");
+    console.error("   Error:", error.message);
+    throw new AppError("PAYMENT_FAILED", {
+      message: `Failed to broadcast release transaction: ${error.message}`,
+    });
+  }
 
-  // Update escrow with transaction hash
+  // Step 7: Update database
+  console.log("✅ Step 7: Updating database...");
   await tx.escrow.update({
     where: { id: currentEscrow.id },
     data: { txHash },
@@ -965,9 +1760,11 @@ export async function _releaseEscrow(
     EscrowStatus.RELEASED,
     userId,
     {
-      method: "_releaseEscrow",
+      method: "processEscrowRelease",
       txHash,
-      sellerAddress: sellerWallet.address,
+      sellerAddress: sellerAddress,
+      amountSent: amountToSend,
+      releasedAt: new Date().toISOString(),
     },
     tx,
   );
@@ -978,11 +1775,24 @@ export async function _releaseEscrow(
       id: generateId(),
       escrowId: currentEscrow.id,
       txHash,
-      amountBCH: currentEscrow.amountBCH,
+      amountBCH: amountToSend,
       confirmations: 0,
       direction: TransactionDirection.OUTBOUND,
     },
   });
+
+  console.log("━".repeat(80));
+  console.log("✅ ESCROW RELEASE COMPLETE!");
+  console.log("━".repeat(80));
+  console.log("   Escrow ID:", currentEscrow.escrowId);
+  console.log("   TX Hash:", txHash);
+  console.log("   Amount Sent:", amountToSend, "BCH");
+  console.log("   Seller Wallet:", sellerAddress);
+  console.log("   Status: RELEASED");
+  console.log(
+    "   Explorer: https://blockchair.com/bitcoin-cash/transaction/" + txHash,
+  );
+  console.log("━".repeat(80));
 
   return updatedEscrow;
 }
@@ -994,6 +1804,7 @@ export async function _releaseEscrow(
  *
  * @param escrowId - Escrow ID or MongoDB _id
  * @param userId - Requesting user ID (must be buyer)
+ * @param destinationAddress - Destination BCH address (optional, defaults to seller's profile if implemented)
  * @returns Updated escrow
  */
 export async function releaseEscrow(
@@ -1018,7 +1829,8 @@ export async function releaseEscrow(
         });
       }
 
-      return await _releaseEscrow(escrowId, userId, tx);
+      // Pass internal processing
+      return await processEscrowRelease(escrowId, userId, tx);
     },
     { timeout: 20000 },
   );
@@ -1038,7 +1850,7 @@ export async function releaseEscrow(
  * Internal helper for refunding escrow
  * Can be reused in other transactions (e.g., dispute resolution)
  */
-export async function _refundEscrow(
+export async function processEscrowRefund(
   escrowId: string,
   userId: string, // User initiating
   tx: Prisma.TransactionClient,
@@ -1079,37 +1891,14 @@ export async function _refundEscrow(
       EscrowStatus.DISPUTED,
       userId,
       {
-        method: "_refundEscrow",
+        method: "processEscrowRefund",
         reason: isExpired ? "expired" : "manual_refund",
       },
       tx,
     );
   }
 
-  // Check for active disputes (if NOT transitioning from FUNDED just now, it might already be disputed)
-  // If we just transitioned to DISPUTED, we opened it.
-  // If it WAS disputed, we should check if we can refund.
-  // Actually, if it's DISPUTED, we CAN refund (as resolution).
-  // But public API `refundEscrow` checks: "Cannot refund escrow with active dispute" ???
-  // Wait, `refundEscrow` logic in original code:
-  // "Transition to DISPUTED if not already"
-  // THEN "Check for active disputes".
-  // If we just transitioned it, it HAS a dispute (state is DISPUTED).
-  // `isEscrowDisputed` checks `Dispute` table.
-  // `transitionEscrow` to DISPUTED triggers side effects... does it create a `Dispute` record?
-  // Use `triggerDisputedSideEffects`. It just logs. It does NOT create a `Dispute` record in DB.
-  // But `dispute.service` creates `Dispute` record.
-  // The original code seems to separate "Escrow Status = DISPUTED" from "Dispute Record Exists".
-  // Or implies they should be synced.
-  // However, original code:
-  // 1. Transition to DISPUTED.
-  // 2. Check `isEscrowDisputed`.
-  // If `transitionEscrow` doesn't create a Dispute record, `isEscrowDisputed` returns false (unless one existed before).
-  // So it effectively checks: "Is there a formal dispute record managed by DisputeService?"
-  // If yes, blocking refund? "Cannot refund escrow with active dispute".
-  // This implies `refundEscrow` allows refunding *without* a formal dispute process (e.g. self-refund if expired),
-  // but if a formal dispute exists, you can't just self-refund, you must resolve the dispute.
-
+  // Check for active disputes
   const dispute = await tx.dispute.findFirst({
     where: {
       escrowId: currentEscrow.id,
@@ -1123,14 +1912,25 @@ export async function _refundEscrow(
     });
   }
 
-  // Get buyer's BCH address (for MVP, generate temporary address)
-  const buyerWallet = generateWallet();
+  // Validate destination address
+  // Use Buyer's permanent wallet address as requested by verification audit
+  const buyerWallet = (escrow as any).buyer?.walletAddress;
+
+  if (!buyerWallet) {
+    throw new AppError("WALLET_NOT_FOUND", {
+      message: "Buyer wallet not set up. Cannot refund funds.",
+    });
+  }
+
+  // Use Buyer's permanent address
+  const buyerAddress = buyerWallet;
 
   // Decrypt escrow private key
   const privateKey = decryptPrivateKey(currentEscrow.privateKeyEncrypted);
 
   // FETCH ACTUAL BALANCE
   const balance = await getAddressBalance(currentEscrow.escrowAddress);
+  // Use total balance to allow 0-conf refunds
   const availableBCH = balance.balance;
 
   // Create and broadcast transaction
@@ -1151,7 +1951,7 @@ export async function _refundEscrow(
   try {
     rawTx = await createTransaction(
       currentEscrow.escrowAddress,
-      buyerWallet.address,
+      buyerAddress,
       amountToSend,
       privateKey,
     );
@@ -1188,9 +1988,9 @@ export async function _refundEscrow(
     EscrowStatus.REFUNDED,
     userId,
     {
-      method: "_refundEscrow",
+      method: "processEscrowRefund",
       txHash,
-      buyerAddress: buyerWallet.address,
+      buyerAddress: buyerAddress,
     },
     tx,
   );
@@ -1298,17 +2098,13 @@ export async function submitEscrowWork(
       tx,
     ); // Pass tx to transition
 
-    // Update escrow with submission content
-    // We do this AFTER transition or as part of the same transaction
-    // But transitionEscrow only updates status/timestamps
-    await tx.escrow.update({
+    // Update escrow with submission content and return the final state
+    return await tx.escrow.update({
       where: { id: escrow.id },
       data: {
         submissionContent: description,
       },
     });
-
-    return escrow;
   });
 }
 
@@ -1320,6 +2116,17 @@ export async function submitEscrowWork(
  *
  * @param escrowId - Escrow ID or MongoDB _id
  * @param userId - Requesting user ID
+ * @returns Updated escrow
+ */
+/**
+ * Refunds escrow funds to buyer
+ * Status transition: DISPUTED → REFUNDED
+ * Note: Will auto-transition to DISPUTED first if not already disputed
+ * Authorization: Buyer or seller (if expired)
+ *
+ * @param escrowId - Escrow ID or MongoDB _id
+ * @param userId - Requesting user ID
+ * @param destinationAddress - Destination BCH address (required)
  * @returns Updated escrow
  */
 export async function refundEscrow(
@@ -1348,7 +2155,7 @@ export async function refundEscrow(
         });
       }
 
-      return await _refundEscrow(escrowId, userId, tx);
+      return await processEscrowRefund(escrowId, userId, tx);
     },
     { timeout: 20000 },
   );

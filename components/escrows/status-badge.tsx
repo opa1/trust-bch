@@ -46,6 +46,10 @@ export function StatusBadge({ status }: StatusBadgeProps) {
   // Custom styling for non-standard variants
   const className =
     {
+      default: "",
+      secondary: "",
+      destructive: "",
+      outline: "",
       success:
         "bg-green-500/15 text-green-700 dark:text-green-400 hover:bg-green-500/25 border-transparent",
       warning:

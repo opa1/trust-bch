@@ -4,6 +4,7 @@ import React, { createContext, useContext, useEffect, useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
 import { Bell } from "lucide-react";
+import { apiClient } from "@/lib/api-client";
 
 export interface Notification {
   id: string;
@@ -58,39 +59,36 @@ export function NotificationProvider({
   const fetchNotifications = async () => {
     if (!isAuthenticated) return;
     try {
-      const res = await fetch("/api/notifications");
-      if (res.ok) {
-        const data = await res.json();
+      const data = await apiClient.getNotifications();
 
-        // Use refs for comparison to avoid stale closures
-        const currentUnreadCount = unreadCountRef.current;
-        const currentNotifications = notificationsRef.current;
+      // Use refs for comparison to avoid stale closures
+      const currentUnreadCount = unreadCountRef.current;
+      const currentNotifications = notificationsRef.current;
 
-        // Check for new unread notifications to play sound/toast
-        if (data.unreadCount > currentUnreadCount) {
-          // New notification arrived!
-          const newNotifs = data.notifications.filter(
-            (n: Notification) =>
-              !n.read && !currentNotifications.find((old) => old.id === n.id),
-          );
-          if (newNotifs.length > 0) {
-            toast.info("New Notification", {
-              description: newNotifs[0].message,
-            });
-            // Play sound if we had one
-          }
+      // Check for new unread notifications to play sound/toast
+      if (data.unreadCount > currentUnreadCount) {
+        // New notification arrived!
+        const newNotifs = data.notifications.filter(
+          (n: Notification) =>
+            !n.read && !currentNotifications.find((old) => old.id === n.id),
+        );
+        if (newNotifs.length > 0) {
+          toast.info("New Notification", {
+            description: newNotifs[0].message,
+          });
+          // Play sound if we had one
         }
+      }
 
-        // Only update state if changed to avoid re-renders
-        if (
-          JSON.stringify(data.notifications) !==
-          JSON.stringify(currentNotifications)
-        ) {
-          setNotifications(data.notifications);
-        }
-        if (data.unreadCount !== currentUnreadCount) {
-          setUnreadCount(data.unreadCount);
-        }
+      // Only update state if changed to avoid re-renders
+      if (
+        JSON.stringify(data.notifications) !==
+        JSON.stringify(currentNotifications)
+      ) {
+        setNotifications(data.notifications);
+      }
+      if (data.unreadCount !== currentUnreadCount) {
+        setUnreadCount(data.unreadCount);
       }
     } catch (error) {
       console.error("Failed to fetch notifications", error);
@@ -108,11 +106,7 @@ export function NotificationProvider({
 
   const markAsRead = async (id: string) => {
     try {
-      await fetch("/api/notifications/read", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ notificationId: id }),
-      });
+      await apiClient.markNotificationRead(id);
       // Optimistic updatemarkAsRead
       setNotifications((prev) =>
         prev.map((n) => (n.id === id ? { ...n, read: true } : n)),
@@ -125,11 +119,7 @@ export function NotificationProvider({
 
   const markAllAsRead = async () => {
     try {
-      await fetch("/api/notifications/read", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ markAll: true }),
-      });
+      await apiClient.markAllNotificationsRead();
       setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
       setUnreadCount(0);
     } catch (error) {

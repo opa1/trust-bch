@@ -10,22 +10,21 @@ if (!connectionString) {
 
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient;
-  pgPool: Pool; // renamed to avoid conflict with stale cached 'pool'
+  pgPool: Pool;
 };
 
-// Use a different key ('pgPool') to avoid reusing the stale @neondatabase pool
+// Use pg Pool (standard Node.js driver)
 const pool =
   globalForPrisma.pgPool ||
   new Pool({
     connectionString,
-    max: 5,
-    idleTimeoutMillis: 30_000,
+    max: 5, // Keep low for serverless/dev
     connectionTimeoutMillis: 10_000,
-    keepAlive: true,
+    idleTimeoutMillis: 30_000,
   });
 
-// Handle pool errors gracefully (prevents crashes on Neon idle disconnect)
-pool.on("error", (err) => {
+// Handle pool errors gracefully
+pool.on("error", (err: any) => {
   console.warn("[Prisma Pool] Idle client error:", err.message);
 });
 

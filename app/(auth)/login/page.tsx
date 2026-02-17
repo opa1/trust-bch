@@ -19,13 +19,14 @@ import {
 } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useAuth } from "@/hooks/useAuth";
+import { Suspense } from "react";
 
 interface LoginCredentials {
   email: string;
   password: string;
 }
 
-export default function LoginPage() {
+function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { login } = useAuth();
@@ -58,88 +59,102 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center md:p-4">
-      <Card className="w-full max-w-md">
-        <CardHeader className="space-y-1 text-center">
-          <div className="mx-auto mb-4 flex items-center justify-center">
-            <Logo width={160} height={50} />
+    <Card className="w-full max-w-md">
+      <CardHeader className="space-y-1 text-center">
+        <div className="mx-auto mb-4 flex items-center justify-center">
+          <Logo width={160} height={50} />
+        </div>
+        <CardTitle className="text-2xl">Sign in to your account</CardTitle>
+        <CardDescription>
+          Enter your credentials to access your account
+        </CardDescription>
+      </CardHeader>
+      <form onSubmit={handleSubmit}>
+        <CardContent className="space-y-4">
+          {error && (
+            <Alert variant="destructive">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
+
+          <div className="space-y-2">
+            <Label htmlFor="email">Email</Label>
+            <Input
+              id="email"
+              type="email"
+              placeholder="you@example.com"
+              required
+              value={credentials.email}
+              onChange={(e) =>
+                setCredentials({ ...credentials, email: e.target.value })
+              }
+              disabled={isLoading}
+            />
           </div>
-          <CardTitle className="text-2xl">Sign in to your account</CardTitle>
-          <CardDescription>
-            Enter your credentials to access your account
-          </CardDescription>
-        </CardHeader>
-        <form onSubmit={handleSubmit}>
-          <CardContent className="space-y-4">
-            {error && (
-              <Alert variant="destructive">
-                <AlertCircle className="h-4 w-4" />
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
-            )}
 
-            <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
-              <Input
-                id="email"
-                type="email"
-                placeholder="you@example.com"
-                required
-                value={credentials.email}
-                onChange={(e) =>
-                  setCredentials({ ...credentials, email: e.target.value })
-                }
-                disabled={isLoading}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label htmlFor="password">Password</Label>
-                <Link
-                  href="/auth/forgot-password"
-                  className="text-sm text-primary hover:underline"
-                >
-                  Forgot password?
-                </Link>
-              </div>
-              <PasswordInput
-                id="password"
-                placeholder="••••••••"
-                required
-                value={credentials.password}
-                onChange={(e) =>
-                  setCredentials({ ...credentials, password: e.target.value })
-                }
-                disabled={isLoading}
-              />
-            </div>
-          </CardContent>
-
-          <CardFooter className="flex flex-col space-y-4">
-            <Button type="submit" className="w-full" disabled={isLoading}>
-              {isLoading ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Signing in...
-                </>
-              ) : (
-                "Sign in"
-              )}
-            </Button>
-
-            <p className="text-center text-sm text-muted-foreground">
-              Don't have an account?{" "}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label htmlFor="password">Password</Label>
               <Link
-                href="/register"
-                className="font-medium text-primary hover:underline"
+                href="/auth/forgot-password"
+                className="text-sm text-primary hover:underline"
               >
-                Sign up
+                Forgot password?
               </Link>
-            </p>
-          </CardFooter>
-        </form>
-      </Card>
+            </div>
+            <PasswordInput
+              id="password"
+              placeholder="••••••••"
+              required
+              value={credentials.password}
+              onChange={(e) =>
+                setCredentials({ ...credentials, password: e.target.value })
+              }
+              disabled={isLoading}
+            />
+          </div>
+        </CardContent>
+
+        <CardFooter className="flex flex-col space-y-4">
+          <Button type="submit" className="w-full" disabled={isLoading}>
+            {isLoading ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Signing in...
+              </>
+            ) : (
+              "Sign in"
+            )}
+          </Button>
+
+          <p className="text-center text-sm text-muted-foreground">
+            Don't have an account?{" "}
+            <Link
+              href="/register"
+              className="font-medium text-primary hover:underline"
+            >
+              Sign up
+            </Link>
+          </p>
+        </CardFooter>
+      </form>
+    </Card>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <div className="flex min-h-screen items-center justify-center md:p-4">
+      <Suspense
+        fallback={
+          <div className="flex items-center justify-center">
+            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+          </div>
+        }
+      >
+        <LoginForm />
+      </Suspense>
     </div>
   );
 }

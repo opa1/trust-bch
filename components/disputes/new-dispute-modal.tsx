@@ -3,7 +3,6 @@
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import * as z from "zod";
 import { Loader2, Plus } from "lucide-react";
 import { toast } from "sonner";
 
@@ -37,13 +36,12 @@ import {
 } from "@/components/ui/select";
 import { apiClient } from "@/lib/api-client";
 
-const formSchema = z.object({
-  escrowId: z.string().min(1, "Escrow ID is required"),
-  reason: z.string().min(1, "Reason is required"),
-  description: z
-    .string()
-    .min(20, "Please provide more details (at least 20 chars)"),
-});
+import {
+  createDisputeSchema,
+  type CreateDisputeFormData,
+} from "@/lib/validations/dispute";
+
+const formSchema = createDisputeSchema;
 
 // Props could span a list of eligible escrows to select from
 interface NewDisputeModalProps {
@@ -58,7 +56,7 @@ export function NewDisputeModal({
   const [open, setOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
-  const form = useForm<z.infer<typeof formSchema>>({
+  const form = useForm<CreateDisputeFormData>({
     resolver: zodResolver(formSchema),
     defaultValues: {
       escrowId: preselectedEscrowId || "",
@@ -67,7 +65,7 @@ export function NewDisputeModal({
     },
   });
 
-  async function onSubmit(values: z.infer<typeof formSchema>) {
+  async function onSubmit(values: CreateDisputeFormData) {
     try {
       setIsLoading(true);
       await apiClient.createDispute(values.escrowId, {

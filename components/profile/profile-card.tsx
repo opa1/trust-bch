@@ -1,6 +1,6 @@
 "use client";
 
-import { User, Mail, Calendar, Shield } from "lucide-react";
+import { User as UserIcon, Mail, Calendar, Shield } from "lucide-react";
 import {
   Card,
   CardContent,
@@ -11,13 +11,10 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 
+import { User } from "@/lib/store/auth.store";
+
 interface ProfileCardProps {
-  user: {
-    id: string;
-    fullName: string;
-    email: string;
-    createdAt: string;
-  } | null;
+  user: User | null;
 }
 
 export function ProfileCard({ user }: ProfileCardProps) {
@@ -46,7 +43,7 @@ export function ProfileCard({ user }: ProfileCardProps) {
       <CardContent className="grid gap-4">
         <div className="flex items-center justify-between rounded-lg border p-3 shadow-sm">
           <div className="flex items-center gap-2 text-sm">
-            <User className="h-4 w-4 text-muted-foreground" />
+            <UserIcon className="h-4 w-4 text-muted-foreground" />
             <span className="font-medium text-muted-foreground">User ID</span>
           </div>
           <code className="rounded bg-muted px-2 py-0.5 font-mono text-xs">

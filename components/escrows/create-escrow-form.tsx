@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { SellerSearchInput } from "@/components/escrows/seller-search-input";
 
 import { apiClient } from "@/lib/api-client";
 import {
@@ -83,7 +84,7 @@ export function CreateEscrowForm() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
       >
-        <Card className="border-0 shadow-lg bg-white/50 dark:bg-slate-900/50 backdrop-blur-xl rounded-none!">
+        <Card className="border-0 shadow-lg bg-white/50 dark:bg-slate-900/50 backdrop-blur-xl">
           <CardHeader className="px-5 md:px-8">
             <CardTitle className="text-2xl font-bold bg-linear-to-r from-emerald-600 to-teal-500 bg-clip-text text-transparent">
               Create New Escrow
@@ -140,13 +141,13 @@ export function CreateEscrowForm() {
 
                 <div className="space-y-2">
                   <Label htmlFor="sellerEmail">Seller's Email</Label>
-                  <Input
+                  <SellerSearchInput
                     id="sellerEmail"
-                    type="email"
-                    placeholder="seller@example.com"
+                    placeholder="Search by name or email"
                     {...register("sellerEmail")}
                     className={errors.sellerEmail ? "border-red-500" : ""}
                   />
+                  
                   {errors.sellerEmail && (
                     <p className="text-sm text-red-500">
                       {errors.sellerEmail.message}

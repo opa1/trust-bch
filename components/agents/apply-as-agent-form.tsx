@@ -3,7 +3,6 @@
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import * as z from "zod";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -31,26 +30,18 @@ import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { apiClient } from "@/lib/api-client";
 
-const formSchema = z.object({
-  bio: z.string().min(50, {
-    message: "Bio must be at least 50 characters.",
-  }),
-  email: z.string().email({
-    message: "Please enter a valid contact email.",
-  }),
-  terms: z
-    .boolean()
-    .default(false)
-    .refine((val) => val === true, {
-      message: "You must agree to the agent terms and conditions.",
-    }),
-});
+import {
+  applyAsAgentSchema,
+  type ApplyAsAgentFormData,
+} from "@/lib/validations/agent";
+
+const formSchema = applyAsAgentSchema;
 
 export function ApplyAsAgentForm() {
   const [open, setOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
-  const form = useForm<z.infer<typeof formSchema>>({
+  const form = useForm<ApplyAsAgentFormData>({
     resolver: zodResolver(formSchema),
     defaultValues: {
       bio: "",
@@ -59,7 +50,7 @@ export function ApplyAsAgentForm() {
     },
   });
 
-  async function onSubmit(values: z.infer<typeof formSchema>) {
+  async function onSubmit(values: ApplyAsAgentFormData) {
     try {
       setIsLoading(true);
       await apiClient.applyAsAgent(values);

@@ -4,7 +4,7 @@ import {
   handleError,
   successResponse,
 } from "@/lib/utils/responses";
-import { createEscrowSchema } from "@/lib/utils/validators";
+import { createEscrowSchema } from "@/lib/validations/escrow";
 import { getUserById } from "@/services/auth.service";
 import { createEscrow } from "@/services/escrow.service";
 import { NextRequest } from "next/server";
@@ -36,8 +36,8 @@ export async function POST(req: NextRequest) {
     // Create escrow (buyer is the authenticated user)
     const result = await createEscrow(
       user.email, // buyer email
-      validatedData.receiverEmail, // seller email
-      validatedData.amount,
+      validatedData.sellerEmail, // seller email (Standardized)
+      validatedData.amountBCH,
       validatedData.description,
       validatedData.expiryHours,
     );

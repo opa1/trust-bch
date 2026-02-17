@@ -148,7 +148,7 @@ export function EscrowActions({
             </>
           )}
 
-          {status.toLowerCase() === "funded" && (
+          {["funded", "verified"].includes(status.toLowerCase()) && (
             <>
               <DropdownMenuSeparator />
               {isBuyer && (
@@ -157,7 +157,7 @@ export function EscrowActions({
                   Release Funds
                 </DropdownMenuItem>
               )}
-              {isSeller && (
+              {isSeller && status.toLowerCase() === "funded" && (
                 <DropdownMenuItem onClick={() => setConfirmAction("refund")}>
                   <RefreshCcw className="mr-2 h-4 w-4" />
                   Refund Buyer

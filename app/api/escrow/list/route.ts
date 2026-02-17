@@ -44,7 +44,10 @@ export async function GET(req: NextRequest) {
         description: escrow.description,
         amountBCH: escrow.amountBCH,
         status: escrow.status,
-        role: escrow.buyerUserId === userId ? "buyer" : "seller",
+        role:
+          (authResult as any).userId === escrow.buyerUserId
+            ? "buyer"
+            : "seller",
         fundedAt: escrow.fundedAt,
         completedAt: escrow.completedAt,
         expiresAt: escrow.expiresAt,

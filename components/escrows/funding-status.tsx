@@ -25,7 +25,10 @@ export function FundingStatus({
   const shouldPoll =
     normalizedStatus === "awaiting_funding" ||
     normalizedStatus === "created" ||
-    normalizedStatus === "pending";
+    normalizedStatus === "pending" ||
+    normalizedStatus === "funding_in_progress";
+
+  const isConfirming = normalizedStatus === "funding_in_progress";
 
   const checkFunding = React.useCallback(async () => {
     try {
@@ -39,7 +42,8 @@ export function FundingStatus({
         if (
           newStatus !== "awaiting_funding" &&
           newStatus !== "created" &&
-          newStatus !== "pending"
+          newStatus !== "pending" &&
+          newStatus !== "funding_in_progress"
         ) {
           onStatusChange(escrow.status);
         }
@@ -82,20 +86,26 @@ export function FundingStatus({
   return (
     <div className="flex items-center gap-3 rounded-lg border bg-muted/30 px-4 py-3">
       <div className="relative flex items-center justify-center">
-        {polling ? (
+        {polling || isConfirming ? (
           <Loader2 className="h-4 w-4 animate-spin text-amber-500" />
         ) : (
           <Radio className="h-4 w-4 text-amber-500 animate-pulse" />
         )}
       </div>
       <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium">Waiting for deposit...</p>
+        <p className="text-sm font-medium">
+          {isConfirming
+            ? "Transaction broadcasted. Confirming..."
+            : "Waiting for deposit..."}
+        </p>
         <p className="text-xs text-muted-foreground">
-          {polling
-            ? "Checking blockchain..."
-            : lastChecked
-              ? `Last checked ${lastChecked.toLocaleTimeString()}`
-              : "Monitoring for incoming transactions"}
+          {isConfirming
+            ? "Waiting for blockchain confirmation. This typically takes a few minutes."
+            : polling
+              ? "Checking blockchain..."
+              : lastChecked
+                ? `Last checked ${lastChecked.toLocaleTimeString()}`
+                : "Monitoring for incoming transactions"}
         </p>
       </div>
     </div>

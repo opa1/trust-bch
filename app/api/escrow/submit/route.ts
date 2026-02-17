@@ -1,14 +1,10 @@
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { verifyAuth } from "@/lib/auth";
 import { submitEscrowWork } from "@/services/escrow.service";
-import { z } from "zod";
+import { submitEscrowWorkSchema } from "@/lib/validations/escrow";
 import { AppError } from "@/lib/errors/AppError";
 import { NextRequest } from "next/server";
-
-const submitWorkSchema = z.object({
-  escrowId: z.string().min(1, "Escrow ID is required"),
-  description: z.string().optional(),
-});
 
 export async function POST(req: NextRequest) {
   try {
@@ -19,22 +15,22 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
-    const validatedData = submitWorkSchema.parse(body);
+    const result = submitEscrowWorkSchema.safeParse(body);
 
-    const escrow = await submitEscrowWork(
-      validatedData.escrowId,
-      auth.userId,
-      validatedData.description,
-    );
-
-    return NextResponse.json({ escrow });
-  } catch (error) {
-    if (error instanceof z.ZodError) {
+    if (!result.success) {
       return NextResponse.json(
-        { error: "Validation failed", details: error.errors },
+        { error: "Validation failed", details: result.error.issues },
         { status: 400 },
       );
     }
+
+    const { escrowId, description } = result.data;
+
+    const escrow = await submitEscrowWork(escrowId, auth.userId, description);
+
+    return NextResponse.json({ escrow });
+  } catch (error) {
+    // ZodError handling removed as we use safeParse
 
     if (error instanceof AppError) {
       return NextResponse.json(

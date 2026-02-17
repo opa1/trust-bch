@@ -1,5 +1,5 @@
 import { handleError, successResponse } from "@/lib/utils/responses";
-import { signupSchema } from "@/lib/utils/validators";
+import { signupSchema } from "@/lib/validations/auth";
 import { setAuthCookie } from "@/lib/utils/cookies";
 import { registerUser } from "@/services/auth.service";
 import { NextRequest, NextResponse } from "next/server";

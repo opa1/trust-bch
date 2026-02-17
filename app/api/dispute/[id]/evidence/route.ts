@@ -5,13 +5,8 @@ import {
   successResponse,
 } from "@/lib/utils/responses";
 import { addEvidence } from "@/services/dispute.service";
+import { addEvidenceSchema } from "@/lib/validations/dispute";
 import { NextRequest } from "next/server";
-import { z } from "zod";
-
-const addEvidenceSchema = z.object({
-  content: z.string().min(1, "Evidence content is required"),
-  type: z.enum(["text", "image", "file"]).default("text"),
-});
 
 /**
  * POST /api/dispute/[id]/evidence

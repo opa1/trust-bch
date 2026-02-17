@@ -10,6 +10,7 @@ export const NotificationService = {
     return prisma.notification.findMany({
       where: { userId },
       orderBy: { createdAt: "desc" },
+      take: 50, // Limit to recent 50 to prevent performance issues
     });
   },
 

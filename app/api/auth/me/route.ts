@@ -34,6 +34,11 @@ export async function GET(req: NextRequest) {
         email: user.email,
         fullName: user.fullName,
         createdAt: user.createdAt,
+        walletAddress: user.walletAddress,
+        successRate: user.successRate,
+        completedTasks: user.completedTasks,
+        totalEscrows: user.totalEscrows,
+        totalDisputes: user.totalDisputes,
       },
     });
   } catch (error) {

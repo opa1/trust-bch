@@ -3,7 +3,6 @@
 import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import * as z from "zod";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
@@ -30,21 +29,18 @@ import { Input } from "@/components/ui/input";
 import { apiClient } from "@/lib/api-client";
 import { useAuth } from "@/hooks/useAuth";
 
-const formSchema = z.object({
-  fullName: z.string().min(2, {
-    message: "Name must be at least 2 characters.",
-  }),
-  email: z.string().email({
-    message: "Please enter a valid email address.",
-  }),
-  password: z.string().optional().or(z.literal("")),
-});
+import {
+  updateProfileSchema,
+  type UpdateProfileFormData,
+} from "@/lib/validations/profile";
+
+const formSchema = updateProfileSchema;
 
 export function UpdateProfileForm() {
-  const { user, setUser } = useAuth(); // Assuming setUser is available or use checkAuth to refresh
+  const { user, checkAuth } = useAuth(); // Assuming setUser is available or use checkAuth to refresh
   const [isLoading, setIsLoading] = useState(false);
 
-  const form = useForm<z.infer<typeof formSchema>>({
+  const form = useForm<UpdateProfileFormData>({
     resolver: zodResolver(formSchema),
     defaultValues: {
       fullName: "",
@@ -64,7 +60,7 @@ export function UpdateProfileForm() {
     }
   }, [user, form]);
 
-  async function onSubmit(values: z.infer<typeof formSchema>) {
+  async function onSubmit(values: UpdateProfileFormData) {
     try {
       setIsLoading(true);
 
@@ -134,10 +130,7 @@ export function UpdateProfileForm() {
     }
   }
 
-  // Need to get checkAuth from hook
-  const { checkAuth } = useAuth();
-
-  const handleAfterSubmit = async (values: z.infer<typeof formSchema>) => {
+  const handleAfterSubmit = async (values: UpdateProfileFormData) => {
     // Wrapper to handle async and `checkAuth` after submit
     await onSubmit(values);
     await checkAuth();

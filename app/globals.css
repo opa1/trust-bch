@@ -172,7 +172,7 @@
 
 @layer base {
   * {
-    @apply border-border outline-ring/50;
+    @apply border-border outline-ring/50 break-normal;
   }
   body {
     @apply bg-background text-foreground font-sans;
@@ -198,6 +198,7 @@
     font-family: inherit;
   }
 }
+
 @layer utilities {
   .container {
     margin-left: auto;

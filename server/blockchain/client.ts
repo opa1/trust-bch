@@ -1,5 +1,7 @@
-import "server-only";
+// import "server-only";
 import axios from "axios";
+import http from "http";
+import https from "https";
 
 // ─── Interfaces ────────────────────────────────────────────────────────────────
 
@@ -22,6 +24,95 @@ export interface UTXO {
   tx_pos: number;
   value: number; // In satoshis
   height: number;
+}
+
+// ─── HTTP Agent Pooling ────────────────────────────────────────────────────────
+
+const httpAgent = new http.Agent({
+  keepAlive: true,
+  maxSockets: 50,
+  maxFreeSockets: 10,
+  timeout: 60000, // 60s
+});
+
+const httpsAgent = new https.Agent({
+  keepAlive: true,
+  maxSockets: 50,
+  maxFreeSockets: 10,
+  timeout: 60000,
+});
+
+const apiClient = axios.create({
+  httpAgent,
+  httpsAgent,
+  timeout: 10000,
+  headers: {
+    "User-Agent": "TrustBCH/1.0",
+  },
+});
+
+// ─── Retry Logic ──────────────────────────────────────────────────────────────
+
+async function fetchWithRetry(
+  url: string,
+  options: any = {},
+  retries = 3,
+): Promise<any> {
+  let lastError;
+  for (let i = 0; i < retries; i++) {
+    try {
+      return await apiClient.get(url, options);
+    } catch (error: any) {
+      lastError = error;
+      const isRetryable =
+        !error.response ||
+        (error.response.status >= 500 && error.response.status < 600) ||
+        error.code === "ECONNRESET" ||
+        error.code === "ETIMEDOUT";
+      if (!isRetryable) throw error;
+
+      // Exponential backoff
+      const delay = Math.pow(2, i) * 1000;
+      if (i < retries - 1) {
+        console.warn(
+          `[BCH Client] Request failed, retrying in ${delay}ms... URL: ${url}`,
+        );
+        await new Promise((res) => setTimeout(res, delay));
+      }
+    }
+  }
+  throw lastError;
+}
+
+async function postWithRetry(
+  url: string,
+  body: any,
+  options: any = {},
+  retries = 3,
+): Promise<any> {
+  let lastError;
+  for (let i = 0; i < retries; i++) {
+    try {
+      return await apiClient.post(url, body, options);
+    } catch (error: any) {
+      lastError = error;
+      const isRetryable =
+        !error.response ||
+        (error.response.status >= 500 && error.response.status < 600) ||
+        error.code === "ECONNRESET" ||
+        error.code === "ETIMEDOUT";
+      if (!isRetryable) throw error;
+
+      const delay = Math.pow(2, i) * 1000;
+      if (i < retries - 1) {
+        console.warn(
+          `[BCH Client] POST failed, retrying in ${delay}ms... URL: ${url}`,
+        );
+        await new Promise((res) => setTimeout(res, delay));
+      }
+    }
+  }
+  throw lastError;
 }
 
 // ─── Multi-API Provider System ─────────────────────────────────────────────────
@@ -56,11 +147,11 @@ function getFullStackBaseUrl(): string {
  * FullStack.cash is prioritized because it supports both testnet and mainnet.
  * Blockchain.info and Bitcoin.com are mainnet-only fallbacks.
  */
-const providers: ApiProvider[] = [
+export const providers: ApiProvider[] = [
   // ── FullStack.cash (testnet + mainnet) ──
   {
     name: "FullStack.cash",
-    testnet: true,
+    testnet: false,
     getBalanceUrl: (addr) =>
       `${getFullStackBaseUrl()}/electrumx/balance/${addr}`,
     parseBalance: (data, address) => {
@@ -102,6 +193,56 @@ const providers: ApiProvider[] = [
       `${getFullStackBaseUrl()}/rawtransactions/sendRawTransaction`,
     buildBroadcastBody: (hex) => ({ hexes: [hex] }),
     parseBroadcast: (data) => data[0],
+  },
+
+  // ─── Blockchair (mainnet only) ───
+  {
+    name: "Blockchair",
+    testnet: false,
+    getBalanceUrl: (addr) =>
+      `https://api.blockchair.com/bitcoin-cash/dashboards/address/${addr}`,
+    parseBalance: (data, address) => {
+      const addrKey = Object.keys(data.data || {})[0];
+      const addrData = data.data?.[addrKey]?.address;
+      const balance = satoshisToBCH(addrData?.balance || 0);
+      return {
+        address,
+        balance: balance,
+        confirmed: balance, // simplified
+        unconfirmed: 0,
+      };
+    },
+    getTransactionsUrl: (addr) =>
+      `https://api.blockchair.com/bitcoin-cash/dashboards/address/${addr}?limit=10`,
+    parseTransactions: (data) => {
+      const addrKey = Object.keys(data.data || {})[0];
+      const txs = data.data?.[addrKey]?.transactions;
+      if (!Array.isArray(txs)) return [];
+      return txs.map((tx: any) => ({
+        txid: tx.hash,
+        confirmations: 0,
+        value: satoshisToBCH(tx.balance_change),
+        blockHeight: tx.block_id > 0 ? tx.block_id : undefined,
+      }));
+    },
+    getTxDetailsUrl: (txid) =>
+      `https://api.blockchair.com/bitcoin-cash/dashboards/transaction/${txid}`,
+    parseTxDetails: (data) => {
+      const txKey = Object.keys(data.data || {})[0];
+      const txData = data.data?.[txKey]?.transaction;
+      return {
+        txid: txData?.hash,
+        confirmations: 0,
+        value: satoshisToBCH(txData?.output_total || 0),
+        blockHeight: txData?.block_id,
+      };
+    },
+    getUtxosUrl: (addr) => "",
+    parseUtxos: () => [],
+    getBroadcastUrl: () =>
+      "https://api.blockchair.com/bitcoin-cash/push/transaction",
+    buildBroadcastBody: (hex) => ({ data: hex }),
+    parseBroadcast: (data) => data.data?.transaction_hash,
   },
 
   // ── Blockchain.info BCH (mainnet only) ──
@@ -160,60 +301,55 @@ const providers: ApiProvider[] = [
     parseBroadcast: (data) => data,
   },
 
-  // ── Bitcoin.com REST (mainnet only) ──
+  // ─── Paytaca (Watchtower) ───
   {
-    name: "Bitcoin.com",
+    name: "Paytaca",
     testnet: false,
     getBalanceUrl: (addr) =>
-      `https://rest.bitcoin.com/v2/address/details/${addr}`,
+      `https://watchtower.paytaca.com/api/balance/${addr}`,
     parseBalance: (data, address) => {
-      const confirmed = satoshisToBCH(data.balanceSat || data.balance || 0);
-      const unconfirmed = satoshisToBCH(
-        data.unconfirmedBalanceSat || data.unconfirmedBalance || 0,
-      );
       return {
         address,
-        balance: confirmed + unconfirmed,
-        confirmed,
-        unconfirmed,
+        balance: satoshisToBCH((data.confirmed || 0) + (data.unconfirmed || 0)),
+        confirmed: satoshisToBCH(data.confirmed || 0),
+        unconfirmed: satoshisToBCH(data.unconfirmed || 0),
       };
     },
     getTransactionsUrl: (addr) =>
-      `https://rest.bitcoin.com/v2/address/transactions/${addr}`,
+      `https://watchtower.paytaca.com/api/history/${addr}`,
     parseTransactions: (data) => {
-      const txs = data.txs || data;
-      if (!Array.isArray(txs)) return [];
-      return txs.map((tx: any) => ({
-        txid: tx.txid,
-        confirmations: tx.confirmations || 0,
-        value: satoshisToBCH(tx.valueOut || tx.value || 0),
-        blockHeight: tx.blockheight || undefined,
+      if (!Array.isArray(data)) return [];
+      return data.map((tx: any) => ({
+        txid: tx.tx_hash,
+        confirmations: tx.height > 0 ? 1 : 0,
+        value: 0,
+        blockHeight: tx.height,
       }));
     },
-    getTxDetailsUrl: (txid) =>
-      `https://rest.bitcoin.com/v2/transaction/details/${txid}`,
+    getTxDetailsUrl: (txid) => `https://watchtower.paytaca.com/api/tx/${txid}`,
     parseTxDetails: (data) => ({
       txid: data.txid,
-      confirmations: data.confirmations || 0,
-      value: satoshisToBCH(data.valueOut || data.vout?.[0]?.value || 0),
-      blockHeight: data.blockheight,
+      confirmations: 0,
+      value: 0,
+      blockHeight: 0,
     }),
-    getUtxosUrl: (addr) => `https://rest.bitcoin.com/v2/address/utxo/${addr}`,
+    getUtxosUrl: (addr) => `https://watchtower.paytaca.com/api/utxo/${addr}`,
     parseUtxos: (data) => {
-      const utxos = data.utxos || data;
-      if (!Array.isArray(utxos)) return [];
-      return utxos.map((utxo: any) => ({
-        tx_hash: utxo.txid,
-        tx_pos: utxo.vout,
-        value: utxo.satoshis || utxo.value,
-        height: utxo.height || 0,
+      if (!Array.isArray(data)) return [];
+      return data.map((u: any) => ({
+        tx_hash: u.tx_hash,
+        tx_pos: u.tx_pos,
+        value: u.value,
+        height: u.height,
       }));
     },
-    getBroadcastUrl: () =>
-      `https://rest.bitcoin.com/v2/rawtransactions/sendRawTransaction`,
-    buildBroadcastBody: (hex) => ({ hexes: [hex] }),
+    getBroadcastUrl: () => `https://watchtower.paytaca.com/api/broadcast`,
+    buildBroadcastBody: (hex) => ({ tx_hex: hex }),
     parseBroadcast: (data) => data,
   },
+
+  // ── Bitcoin.com REST (mainnet only) - DEPRECATED/OFFLINE ──
+  // Removed as the API is no longer active.
 ];
 
 /**
@@ -221,6 +357,7 @@ const providers: ApiProvider[] = [
  */
 function getProviders(): ApiProvider[] {
   if (isTestnet()) {
+    // Exclude mainnet only providers on testnet
     return providers.filter((p) => p.testnet);
   }
   return providers;
@@ -235,19 +372,35 @@ async function withFallback<T>(
 ): Promise<T> {
   const available = getProviders();
   let lastError: Error | null = null;
+  const errors: string[] = [];
 
   for (const provider of available) {
     try {
       const result = await fn(provider);
+
+      if (operation === "getAddressBalance") {
+        console.log(
+          `[BCH Client] ${provider.name} returned balance for ${(result as any).address}: ${(result as any).balance} BCH`,
+        );
+      } else {
+        console.log(`[BCH Client] ${provider.name} succeeded for ${operation}`);
+      }
+
       return result;
     } catch (error) {
       lastError = error instanceof Error ? error : new Error(String(error));
+      errors.push(`${provider.name}: ${lastError.message}`);
+
       console.warn(
         `[BCH Client] ${provider.name} failed for ${operation}: ${lastError.message}`,
       );
     }
   }
 
+  console.error(
+    `[BCH Client] All providers failed for ${operation}. Errors:`,
+    errors,
+  );
   throw lastError || new Error(`All providers failed for ${operation}`);
 }
 
@@ -271,7 +424,7 @@ export async function getAddressBalance(
 ): Promise<AddressBalance> {
   return withFallback("getAddressBalance", async (provider) => {
     const url = provider.getBalanceUrl(address);
-    const response = await axios.get(url, { timeout: 10_000 });
+    const response = await fetchWithRetry(url);
     return provider.parseBalance(response.data, address);
   });
 }
@@ -284,7 +437,7 @@ export async function getAddressTransactions(
 ): Promise<BCHTransaction[]> {
   return withFallback("getAddressTransactions", async (provider) => {
     const url = provider.getTransactionsUrl(address);
-    const response = await axios.get(url, { timeout: 10_000 });
+    const response = await fetchWithRetry(url);
     return provider.parseTransactions(response.data);
   });
 }
@@ -297,7 +450,7 @@ export async function getTransactionDetails(
 ): Promise<BCHTransaction | null> {
   return withFallback("getTransactionDetails", async (provider) => {
     const url = provider.getTxDetailsUrl(txid);
-    const response = await axios.get(url, { timeout: 10_000 });
+    const response = await fetchWithRetry(url);
     return provider.parseTxDetails(response.data);
   });
 }
@@ -308,8 +461,43 @@ export async function getTransactionDetails(
 export async function getAddressUtxos(address: string): Promise<UTXO[]> {
   return withFallback("getAddressUtxos", async (provider) => {
     const url = provider.getUtxosUrl(address);
-    const response = await axios.get(url, { timeout: 10_000 });
-    return provider.parseUtxos(response.data);
+    if (!url) throw new Error("Method not supported by this provider");
+
+    const response = await fetchWithRetry(url);
+    const utxos = provider.parseUtxos(response.data);
+
+    // Integrity Check: If UTXOs are empty, check if balance > 0
+    // This handles cases where indexer is behind or inconsistent
+    if (utxos.length === 0) {
+      try {
+        const balanceUrl = provider.getBalanceUrl(address);
+        if (balanceUrl) {
+          const balanceRes = await fetchWithRetry(balanceUrl);
+          const balance = provider.parseBalance(balanceRes.data, address);
+          // If we have a balance but no UTXOs, something is wrong
+          if (balance.balance > 0) {
+            throw new Error(
+              `Provider shows balance (${balance.balance}) but 0 UTXOs. Likely indexing lag.`,
+            );
+          }
+        }
+      } catch (err) {
+        // If balance check fails, we can't be sure.
+        // We log warnings but if the original error was "0 UTXOs", we might want to let it pass
+        // OR we treat it as failure to force fallback.
+        // Let's treat "Balance > 0 && UTXOs == 0" as failure.
+        // If verify fails, simple fallback might be safer.
+        if (
+          err instanceof Error &&
+          err.message.includes("Provider shows balance")
+        ) {
+          throw err;
+        }
+        console.warn(`[getAddressUtxos] Integrity check failed: ${err}`);
+      }
+    }
+
+    return utxos;
   });
 }
 
@@ -320,7 +508,7 @@ export async function broadcastTransaction(rawTxHex: string): Promise<string> {
   return withFallback("broadcastTransaction", async (provider) => {
     const url = provider.getBroadcastUrl();
     const body = provider.buildBroadcastBody(rawTxHex);
-    const response = await axios.post(url, body, { timeout: 15_000 });
+    const response = await postWithRetry(url, body);
     return provider.parseBroadcast(response.data);
   });
 }

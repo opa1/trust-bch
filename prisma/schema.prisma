@@ -19,12 +19,17 @@ model User {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  // Relations
-  buyerEscrows     Escrow[]          @relation("BuyerEscrows")
-  sellerEscrows    Escrow[]          @relation("SellerEscrows")
-  disputesRaised   Dispute[]         @relation("DisputesRaised")
-  disputesResolved Dispute[]         @relation("DisputesResolved")
-  evidenceUploaded DisputeEvidence[] @relation("EvidenceUploaded")
+  // Wallet - Permanent source of truth
+  walletAddress       String?           @unique
+  walletPublicKey     String?
+  privateKeyEncrypted String?
+  cachedBalance       Float             @default(0) // Start with 0
+  lastBalanceUpdate   DateTime?
+  buyerEscrows        Escrow[]          @relation("BuyerEscrows")
+  sellerEscrows       Escrow[]          @relation("SellerEscrows")
+  disputesRaised      Dispute[]         @relation("DisputesRaised")
+  disputesResolved    Dispute[]         @relation("DisputesResolved")
+  evidenceUploaded    DisputeEvidence[] @relation("EvidenceUploaded")
 
   // State transitions triggered by this user
   triggeredTransitions StateTransition[] @relation("TriggeredBy")
@@ -36,6 +41,8 @@ model User {
 enum NotificationType {
   ESCROW_FUNDED
   WORK_SUBMITTED
+  WORK_VERIFIED
+  REVISION_REQUESTED
   DISPUTE_OPENED
   DISPUTE_MESSAGE
   ESCROW_RELEASED
@@ -61,6 +68,7 @@ enum EscrowStatus {
 
   // Active states
   FUNDED
+  FUNDING_IN_PROGRESS
   IN_PROGRESS
   SUBMITTED
   VERIFIED
@@ -108,6 +116,24 @@ model Escrow {
   disputes         Dispute[]
   stateTransitions StateTransition[]
   agentSubmissions AgentSubmission[]
+  aiVerifications  AiVerification[]
+}
+
+model AiVerification {
+  id             String   @id
+  escrowId       String
+  escrow         Escrow   @relation(fields: [escrowId], references: [id], onDelete: Cascade)
+  recommendation String // "APPROVE" | "REJECT" | "NEEDS_REVIEW"
+  reason         String   @db.Text
+  confidence     Float // 0.0 to 1.0
+  findings       Json // Structured data from AI analysis
+  verifiedAt     DateTime @default(now())
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([escrowId])
+  @@index([recommendation])
+  @@map("ai_verifications")
 }
 
 enum TransactionDirection {

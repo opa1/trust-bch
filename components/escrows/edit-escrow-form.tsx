@@ -49,7 +49,7 @@ export function EditEscrowForm({ escrow }: EditEscrowFormProps) {
     handleSubmit,
     formState: { errors },
   } = useForm<UpdateEscrowFormData>({
-    resolver: zodResolver(updateEscrowSchema),
+    resolver: zodResolver(updateEscrowSchema) as any,
     defaultValues: {
       description: escrow.description,
       amountBCH: escrow.amountBCH,

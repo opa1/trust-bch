@@ -29,8 +29,14 @@ export async function POST(req: NextRequest) {
       return errorResponse("Escrow ID is required", 400, "VALIDATION_ERROR");
     }
 
+    console.log(
+      `[Release API] Buyer ${authResult.userId} releasing escrow ${escrowId}`,
+    );
+
     // Release escrow (authorization checked in service)
     const escrow = await releaseEscrow(escrowId, authResult.userId);
+
+    console.log(`[Release API] ✅ Escrow ${escrowId} released successfully`);
 
     return successResponse(
       {
@@ -41,8 +47,15 @@ export async function POST(req: NextRequest) {
           txHash: escrow.txHash,
           completedAt: escrow.completedAt,
         },
+        transactionDetails: {
+          txHash: escrow.txHash,
+          explorerUrl: escrow.txHash
+            ? `https://blockchair.com/bitcoin-cash/transaction/${escrow.txHash}`
+            : null,
+          amountBCH: escrow.amountBCH,
+        },
       },
-      "Escrow released successfully",
+      "Funds released successfully to seller",
     );
   } catch (error) {
     return handleError(error);

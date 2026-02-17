@@ -23,7 +23,7 @@ interface Escrow {
 }
 
 interface PendingEscrowsTableProps {
-  escrows: Escrow[];
+  escrows: Escrow[] | any[];
   isLoading: boolean;
 }
 

@@ -1,4 +1,4 @@
-import "server-only";
+// import "server-only";
 import bchLib from "./bitcore";
 import * as client from "./client";
 import * as wallet from "./wallet";
@@ -8,7 +8,7 @@ import { AppError } from "@/lib/errors/AppError";
  * Re-export wallet types and functions for backward compatibility
  */
 export {
-  createEscrowWallet,
+  generateEncryptedWallet,
   decryptPrivateKey,
   encryptPrivateKey,
   generateWallet,

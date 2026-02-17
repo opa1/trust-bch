@@ -1,32 +1,38 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { Wallet, ScrollText, Award, Users, ArrowUpRight } from "lucide-react";
+import {
+  Wallet,
+  ScrollText,
+  Award,
+  CheckCircle,
+  ArrowUpRight,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface OverviewCardsProps {
   balance: number;
   activeEscrows: number;
   reputation: number;
-  agentCount?: number;
+  completedEscrows: number;
 }
 
 export function OverviewCards({
   balance,
   activeEscrows,
   reputation,
-  agentCount = 0,
+  completedEscrows,
 }: OverviewCardsProps) {
   const cards = [
     {
-      title: "Total Balance",
+      title: "Wallet Balance",
       value: `${balance.toFixed(4)} BCH`,
-      description: "Available liquid assets",
+      description: "Confirmed available funds",
       icon: Wallet,
       gradient: "from-emerald-500/20 via-teal-500/20 to-cyan-500/20",
       borderGlow: "group-hover:border-emerald-500/50",
       iconColor: "text-emerald-500",
-      trend: "+2.5%", // Mock trend for visual flair
+      trend: null, // No historical data yet
     },
     {
       title: "Active Escrows",
@@ -36,27 +42,27 @@ export function OverviewCards({
       gradient: "from-blue-500/20 via-indigo-500/20 to-violet-500/20",
       borderGlow: "group-hover:border-blue-500/50",
       iconColor: "text-blue-500",
-      trend: "stable",
+      trend: null,
     },
     {
-      title: "Reputation Score",
+      title: "Success Rate",
       value: `${reputation}%`,
-      description: "Trust verification level",
+      description: "Based on completed transactions",
       icon: Award,
       gradient: "from-amber-500/20 via-orange-500/20 to-red-500/20",
       borderGlow: "group-hover:border-amber-500/50",
       iconColor: "text-amber-500",
-      trend: "Top 5%",
+      trend: null,
     },
     {
-      title: "Assigned Agents",
-      value: agentCount.toString(),
-      description: "Active mediators",
-      icon: Users,
+      title: "Completed",
+      value: completedEscrows.toString(),
+      description: "Successfully finalized escrows",
+      icon: CheckCircle,
       gradient: "from-pink-500/20 via-rose-500/20 to-purple-500/20",
       borderGlow: "group-hover:border-pink-500/50",
       iconColor: "text-pink-500",
-      trend: "Online",
+      trend: null,
     },
   ];
 
@@ -77,7 +83,7 @@ export function OverviewCards({
           {/* Animated Gradient Background */}
           <div
             className={cn(
-              "absolute inset-0 opacity-0 transition-opacity duration-500 group-hover:opacity-100 bg-gradient-to-br",
+              "absolute inset-0 opacity-0 transition-opacity duration-500 group-hover:opacity-100 bg-linear-to-br",
               card.gradient,
             )}
           />
@@ -109,7 +115,7 @@ export function OverviewCards({
             </div>
 
             <div className="space-y-1">
-              <h3 className="text-sm font-medium text-muted-foreground tracking-wide uppercase text-xs">
+              <h3 className="font-medium text-muted-foreground tracking-wide uppercase text-xs">
                 {card.title}
               </h3>
               <div className="flex items-baseline gap-2">
@@ -126,7 +132,7 @@ export function OverviewCards({
           {/* Bottom decorative line */}
           <div
             className={cn(
-              "absolute bottom-0 left-0 h-1 w-0 transition-all duration-500 group-hover:w-full bg-gradient-to-r",
+              "absolute bottom-0 left-0 h-1 w-0 transition-all duration-500 group-hover:w-full bg-linear-to-r",
               card.gradient.replace("/20", ""),
             )}
           />

@@ -1,4 +1,4 @@
-import axios, { type AxiosInstance, type AxiosError } from "axios";
+import axios, { type AxiosInstance } from "axios";
 import { toast } from "./toast-utils";
 
 class ApiClient {
@@ -19,8 +19,8 @@ class ApiClient {
     try {
       // Transform frontend field names to backend field names
       const requestData = {
-        receiverEmail: data.sellerEmail,
-        amount: data.amountBCH,
+        sellerEmail: data.sellerEmail,
+        amountBCH: data.amountBCH,
         description: data.description,
         expiryHours: data.expiryHours,
       };
@@ -142,6 +142,58 @@ class ApiClient {
     }
   }
 
+  async approveWork(escrowId: string) {
+    try {
+      const response = await this.client.post(`/escrow/${escrowId}/approve`);
+      toast.success("Work approved successfully");
+      return response.data;
+    } catch (error) {
+      this.handleError(error, "Failed to approve work");
+      throw error;
+    }
+  }
+
+  async requestRevision(escrowId: string, feedback: string) {
+    try {
+      const response = await this.client.post(
+        `/escrow/${escrowId}/request-revision`,
+        {
+          feedback,
+        },
+      );
+      toast.success("Revision requested");
+      return response.data;
+    } catch (error) {
+      this.handleError(error, "Failed to request revision");
+      throw error;
+    }
+  }
+
+  async disputeEscrow(escrowId: string, reason: string) {
+    try {
+      const response = await this.client.post(`/escrow/${escrowId}/dispute`, {
+        reason,
+      });
+      toast.success("Dispute opened successfully");
+      return response.data;
+    } catch (error) {
+      this.handleError(error, "Failed to open dispute");
+      throw error;
+    }
+  }
+
+  async getAiVerification(escrowId: string) {
+    try {
+      const response = await this.client.get(
+        `/escrow/${escrowId}/ai-verification`,
+      );
+      return response.data;
+    } catch (error) {
+      // Don't toast error here as it might be checked silently
+      throw error;
+    }
+  }
+
   // Agent API methods
   async getAgents() {
     try {
@@ -161,6 +213,28 @@ class ApiClient {
       return response.data;
     } catch (error) {
       this.handleError(error, "Failed to submit agent application");
+      throw error;
+    }
+  }
+
+  // Wallet & Funding Methods
+  async getWalletBalance() {
+    try {
+      const response = await this.client.get("/wallet/balance");
+      return response.data;
+    } catch (error) {
+      // Don't toast error here as it might be polled
+      throw error;
+    }
+  }
+
+  async fundEscrow(escrowId: string) {
+    try {
+      const response = await this.client.post("/escrow/fund", { escrowId });
+      toast.success("Escrow funded successfully!");
+      return response.data;
+    } catch (error) {
+      this.handleError(error, "Failed to fund escrow");
       throw error;
     }
   }
@@ -255,6 +329,58 @@ class ApiClient {
       return response.data.data;
     } catch (error) {
       this.handleError(error, "Failed to update profile");
+      throw error;
+    }
+  }
+
+  async searchUsers(query: string) {
+    try {
+      const response = await this.client.get(
+        `/users/search?query=${encodeURIComponent(query)}`,
+      );
+      return response.data;
+    } catch (error) {
+      this.handleError(error, "Failed to search users");
+      throw error;
+    }
+  }
+
+  // Notifications
+  async getNotifications() {
+    try {
+      const response = await this.client.get("/notifications");
+      return response.data;
+    } catch (error) {
+      // Don't toast on polling errors to avoid spam
+      throw error;
+    }
+  }
+
+  async markNotificationRead(notificationId: string) {
+    try {
+      await this.client.post("/notifications/read", { notificationId });
+    } catch (error) {
+      this.handleError(error, "Failed to mark notification as read");
+      throw error;
+    }
+  }
+
+  async markAllNotificationsRead() {
+    try {
+      await this.client.post("/notifications/read", { markAll: true });
+    } catch (error) {
+      this.handleError(error, "Failed to mark all notifications as read");
+      throw error;
+    }
+  }
+
+  async concedeDispute(disputeId: string) {
+    try {
+      const response = await this.client.post(`/disputes/${disputeId}/concede`);
+      toast.success("Dispute conceded successfully");
+      return response.data;
+    } catch (error) {
+      this.handleError(error, "Failed to concede dispute");
       throw error;
     }
   }

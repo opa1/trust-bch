@@ -126,6 +126,29 @@ export function handleError(error: unknown): NextResponse<ErrorResponse> {
   }
 
   if (error instanceof Error) {
+    // Handle Prisma Connection Errors
+    // @ts-ignore - Prisma errors might not be fully typed here without importing the class
+    const prismaError = error as any;
+    if (
+      prismaError.code === "P1001" ||
+      error.message.includes("Can't reach database server")
+    ) {
+      return errorResponse(
+        "Database is currently unavailable. Please try again later.",
+        503,
+        "DB_CONNECTION_ERROR",
+      );
+    }
+
+    // @ts-ignore
+    if (prismaError.code === "P1002" || error.message.includes("timed out")) {
+      return errorResponse(
+        "Database request timed out. Please try again.",
+        504,
+        "DB_TIMEOUT_ERROR",
+      );
+    }
+
     // Check for common error patterns
     if (error.message.includes("duplicate key")) {
       return errorResponse("Resource already exists", 409, "DUPLICATE_ERROR");

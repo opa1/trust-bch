@@ -27,7 +27,7 @@ export function ActionLogs({ logs = [] }: ActionLogsProps) {
             {logs.map((log, index) => (
               <div key={index} className="relative">
                 <div className="absolute -left-[21px] top-1 h-2.5 w-2.5 rounded-full bg-muted-foreground/30 ring-4 ring-background" />
-                <p className="text-sm font-medium">{log.action}</p>
+                <p className="text-sm font-medium break-all">{log.action}</p>
                 <p className="text-xs text-muted-foreground">
                   {new Date(log.createdAt).toLocaleString()}
                 </p>

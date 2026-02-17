@@ -10,7 +10,7 @@ import {
   Prisma,
 } from "@prisma/client";
 import crypto from "crypto";
-import { _releaseEscrow, _refundEscrow } from "./escrow.service";
+import { processEscrowRelease, processEscrowRefund } from "./escrow.service";
 import { NotificationService } from "@/services/notification.service";
 import { NotificationType } from "@prisma/client";
 
@@ -305,9 +305,9 @@ export async function resolveDispute(
 
       // Execute funds movement
       if (action === "release") {
-        await _releaseEscrow(dispute.escrowId, adminId, tx);
+        await processEscrowRelease(dispute.escrowId, adminId, tx);
       } else if (action === "refund") {
-        await _refundEscrow(dispute.escrowId, adminId, tx);
+        await processEscrowRefund(dispute.escrowId, adminId, tx);
       }
 
       return updatedDispute;
@@ -453,9 +453,9 @@ export async function concedeDispute(
 
       // Execute funds movement
       if (action === "release") {
-        await _releaseEscrow(dispute.escrowId, userId, tx);
+        await processEscrowRelease(dispute.escrowId, userId, tx);
       } else if (action === "refund") {
-        await _refundEscrow(dispute.escrowId, userId, tx);
+        await processEscrowRefund(dispute.escrowId, userId, tx);
       }
 
       // Notify other party
