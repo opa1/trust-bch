@@ -2,9 +2,9 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { motion } from "framer-motion";
-import { Info, Loader2, Plus } from "lucide-react";
-import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { CheckCircle2, Info, Loader2, Mail, Plus } from "lucide-react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -29,22 +29,35 @@ import { useEscrowStore } from "@/lib/store/escrow.store";
 
 export function CreateEscrowForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { invalidateEscrows } = useEscrowStore();
 
+  const preFilledEmail = searchParams.get("sellerEmail");
+  const preFilledAmount = searchParams.get("amount");
+  const preFilledDescription = searchParams.get("description");
+
   const {
     register,
     handleSubmit,
+    setValue,
     formState: { errors },
   } = useForm<CreateEscrowFormData>({
     resolver: zodResolver(createEscrowSchema),
     defaultValues: {
-      description: "",
-      amountBCH: 0,
-      sellerEmail: "",
+      description: preFilledDescription || "",
+      amountBCH: preFilledAmount ? parseFloat(preFilledAmount) : 0,
+      sellerEmail: preFilledEmail || "",
     },
   });
+
+  // Ensure values are updated if searchParams change (though rare for this use case)
+  useEffect(() => {
+    if (preFilledEmail) setValue("sellerEmail", preFilledEmail);
+    if (preFilledAmount) setValue("amountBCH", parseFloat(preFilledAmount));
+    if (preFilledDescription) setValue("description", preFilledDescription);
+  }, [preFilledEmail, preFilledAmount, preFilledDescription, setValue]);
 
   const onSubmit = async (data: CreateEscrowFormData) => {
     setIsSubmitting(true);
@@ -122,16 +135,32 @@ export function CreateEscrowForm() {
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-2">
-                  <Label htmlFor="amountBCH">Amount (BCH)</Label>
-                  <Input
-                    id="amountBCH"
-                    type="number"
-                    step="0.00001"
-                    min="0"
-                    placeholder="0.00"
-                    {...register("amountBCH", { valueAsNumber: true })}
-                    className={errors.amountBCH ? "border-red-500" : ""}
-                  />
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="amountBCH">Amount (BCH)</Label>
+                    {preFilledAmount && (
+                      <span className="text-[10px] text-muted-foreground flex items-center gap-1 font-medium bg-muted px-1.5 py-0.5 rounded">
+                        <Loader2 className="h-3 w-3 animate-pulse" /> Locked
+                        from Listing
+                      </span>
+                    )}
+                  </div>
+                  <div className="relative">
+                    <Input
+                      id="amountBCH"
+                      type="number"
+                      step="0.00001"
+                      min="0"
+                      placeholder="0.00"
+                      {...register("amountBCH", { valueAsNumber: true })}
+                      disabled={!!preFilledAmount}
+                      className={`${errors.amountBCH ? "border-red-500" : ""} ${preFilledAmount ? "bg-muted/50 cursor-not-allowed pr-9" : ""}`}
+                    />
+                    {preFilledAmount && (
+                      <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                        <Info className="h-4 w-4 text-muted-foreground" />
+                      </div>
+                    )}
+                  </div>
                   {errors.amountBCH && (
                     <p className="text-sm text-red-500">
                       {errors.amountBCH.message}
@@ -140,22 +169,51 @@ export function CreateEscrowForm() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="sellerEmail">Seller's Email</Label>
-                  <SellerSearchInput
-                    id="sellerEmail"
-                    placeholder="Search by name or email"
-                    {...register("sellerEmail")}
-                    className={errors.sellerEmail ? "border-red-500" : ""}
-                  />
-                  
-                  {errors.sellerEmail && (
-                    <p className="text-sm text-red-500">
-                      {errors.sellerEmail.message}
-                    </p>
+                  <Label htmlFor="sellerEmail">Seller</Label>
+                  {preFilledEmail ? (
+                    <div className="flex items-center gap-3 p-3 rounded-lg border bg-muted/30 border-primary/20 shadow-sm relative overflow-hidden group">
+                      <div className="absolute top-0 right-0 p-1">
+                        <CheckCircle2 className="h-4 w-4 text-primary opacity-50" />
+                      </div>
+                      <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold shrink-0">
+                        {searchParams
+                          .get("sellerName")
+                          ?.slice(0, 2)
+                          .toUpperCase() || "S"}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-semibold text-sm text-foreground truncate">
+                          {searchParams.get("sellerName") || "Seller"}
+                        </p>
+                        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                          <Mail className="h-3 w-3 text-primary/60" />
+                          <span className="truncate">{preFilledEmail}</span>
+                        </div>
+                      </div>
+                      <div className="flex flex-col items-end gap-1">
+                        <span className="text-[10px] font-semibold text-primary/80 uppercase tracking-wider bg-primary/5 px-1.5 py-0.5 rounded border border-primary/10">
+                          Verified
+                        </span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="relative">
+                      <SellerSearchInput
+                        id="sellerEmail"
+                        placeholder="Search by name or email"
+                        {...register("sellerEmail")}
+                        className={errors.sellerEmail ? "border-red-500" : ""}
+                      />
+                      {errors.sellerEmail && (
+                        <p className="text-sm text-red-500 mt-1">
+                          {errors.sellerEmail.message}
+                        </p>
+                      )}
+                      <p className="text-xs text-muted-foreground mt-1.5 px-1">
+                        The seller must be registered with this email.
+                      </p>
+                    </div>
                   )}
-                  <p className="text-xs text-muted-foreground">
-                    The seller must be registered with this email.
-                  </p>
                 </div>
               </div>
 
@@ -166,9 +224,9 @@ export function CreateEscrowForm() {
                 </h4>
                 <ul className="text-sm text-blue-700 dark:text-blue-300 list-disc list-inside space-y-1">
                   <li>Seller will be notified via email.</li>
-                  <li>
+                  {/* <li>
                     You will receive a unique BCH address to fund the escrow.
-                  </li>
+                  </li> */}
                   <li>
                     Funds are held securely until you verify the delivery.
                   </li>

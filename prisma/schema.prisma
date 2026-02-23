@@ -31,6 +31,9 @@ model User {
   disputesResolved    Dispute[]         @relation("DisputesResolved")
   evidenceUploaded    DisputeEvidence[] @relation("EvidenceUploaded")
 
+  listing    SellerListing?
+  trustScore SellerTrustScore?
+
   // State transitions triggered by this user
   triggeredTransitions StateTransition[] @relation("TriggeredBy")
 
@@ -259,4 +262,33 @@ model StateTransition {
   // Relations
   escrow      Escrow @relation(fields: [escrowId], references: [id])
   triggerUser User?  @relation("TriggeredBy", fields: [triggeredBy], references: [id])
+}
+
+model SellerListing {
+  id           String   @id
+  userId       String   @unique
+  title        String
+  description  String
+  category     String
+  priceInBCH   Float
+  deliveryDays Int
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id])
+}
+
+model SellerTrustScore {
+  id              String   @id
+  userId          String   @unique
+  score           Float    @default(0)
+  totalEscrows    Int      @default(0)
+  completedCount  Int      @default(0)
+  disputedCount   Int      @default(0)
+  avgAiConfidence Float    @default(0)
+  lastCalculated  DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id])
 }

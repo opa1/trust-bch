@@ -1,10 +1,9 @@
 "use client";
 
-import * as React from "react";
-import { useDashboardData } from "@/hooks/use-dashboard-data";
+import { NotificationsPanel } from "@/components/dashboard/notifications-panel";
 import { OverviewCards } from "@/components/dashboard/overview-cards";
 import { PendingEscrowsTable } from "@/components/dashboard/pending-escrows-table";
-import { NotificationsPanel } from "@/components/dashboard/notifications-panel";
+import { useDashboardData } from "@/hooks/use-dashboard-data";
 
 export default function DashboardPage() {
   const {
@@ -29,7 +28,7 @@ export default function DashboardPage() {
       )}
 
       {/* Optional: Show last updated time */}
-      {lastFetchedAt && !isRefreshing && (
+      {/* {lastFetchedAt && !isRefreshing && (
         <div className="flex items-center justify-end gap-2">
           <span className="text-xs text-muted-foreground">
             Last updated: {new Date(lastFetchedAt).toLocaleTimeString()}
@@ -41,7 +40,7 @@ export default function DashboardPage() {
             Refresh
           </button>
         </div>
-      )}
+      )} */}
 
       {/* Overview Cards - shows cached data instantly, no flash of zeros */}
       <OverviewCards

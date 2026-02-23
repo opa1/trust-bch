@@ -30,6 +30,8 @@ import { updateUserReputation } from "@/services/reputation.service";
 import { NotificationService } from "@/services/notification.service";
 import { NotificationType } from "@prisma/client";
 
+import { updateTrustScore } from "@/services/trust-score.service";
+
 /**
  * Allowed state transitions map
  * Defines the strict state machine rules
@@ -509,6 +511,14 @@ async function triggerReleasedSideEffects(escrow: Escrow): Promise<void> {
                 escrow.txHash,
             );
           }
+
+          // Update seller trust score on successful release
+          updateTrustScore(escrow.sellerUserId).catch((error) => {
+            console.error(
+              `[Side Effect - RELEASED] Trust score update failed for seller ${escrow.sellerUserId}:`,
+              error,
+            );
+          });
           console.log("━".repeat(80));
         }
       } catch (balanceError) {
@@ -569,6 +579,14 @@ async function triggerRefundedSideEffects(escrow: Escrow): Promise<void> {
       `Escrow ${escrow.escrowId} has been refunded to the buyer.`,
       escrow.id,
     );
+
+    // Update seller trust score on refund (negative signal)
+    updateTrustScore(escrow.sellerUserId).catch((error) => {
+      console.error(
+        `[Side Effect - REFUNDED] Trust score update failed for seller ${escrow.sellerUserId}:`,
+        error,
+      );
+    });
   } catch (error) {
     console.error("[Side Effect - REFUNDED] Error:", error);
   }

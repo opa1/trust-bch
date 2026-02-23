@@ -1,6 +1,16 @@
 "use client";
 
-import { User as UserIcon, Mail, Calendar, Shield } from "lucide-react";
+import {
+  User as UserIcon,
+  Mail,
+  Calendar,
+  Shield,
+  Wallet,
+  Copy,
+  Check,
+} from "lucide-react";
+import { useState } from "react";
+import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -18,7 +28,17 @@ interface ProfileCardProps {
 }
 
 export function ProfileCard({ user }: ProfileCardProps) {
+  const [copied, setCopied] = useState(false);
+
   if (!user) return null;
+
+  const handleCopyAddress = () => {
+    if (user.walletAddress) {
+      navigator.clipboard.writeText(user.walletAddress);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
 
   return (
     <Card>
@@ -65,6 +85,41 @@ export function ProfileCard({ user }: ProfileCardProps) {
               day: "numeric",
             })}
           </span>
+        </div>
+
+        <div className="flex flex-col gap-2 rounded-lg border p-3 shadow-sm bg-muted/30">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 text-sm">
+              <Wallet className="h-4 w-4 text-primary" />
+              <span className="font-medium">BCH Wallet Address</span>
+            </div>
+            {user.walletAddress && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
+                onClick={handleCopyAddress}
+                title={copied ? "Copied!" : "Copy address"}
+              >
+                {copied ? (
+                  <Check className="h-4 w-4 text-green-500" />
+                ) : (
+                  <Copy className="h-4 w-4" />
+                )}
+              </Button>
+            )}
+          </div>
+          <div className="mt-1">
+            {user.walletAddress ? (
+              <code className="block break-all rounded bg-muted-foreground/10 px-2 py-1.5 font-mono text-[10px] leading-relaxed text-foreground sm:text-xs">
+                {user.walletAddress}
+              </code>
+            ) : (
+              <span className="text-xs text-muted-foreground italic">
+                No wallet address generated
+              </span>
+            )}
+          </div>
         </div>
 
         <div className="flex items-center justify-between rounded-lg border p-3 shadow-sm">

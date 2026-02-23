@@ -2,6 +2,7 @@ import { prisma } from "@/lib/db/prisma";
 import { generateId } from "@/lib/utils/id";
 import { NotificationService } from "@/services/notification.service";
 import { NotificationType } from "@prisma/client";
+import { updateTrustScore } from "@/services/trust-score.service";
 
 interface AiVerificationResult {
   recommendation: "APPROVE" | "REJECT" | "NEEDS_REVIEW";
@@ -107,6 +108,14 @@ export async function recordAiVerification(
     sellerMessage,
     escrowId,
   );
+
+  // Update seller trust score based on AI verdict
+  await updateTrustScore(escrow.sellerUserId).catch((error) => {
+    console.error(
+      `[AI Verification] Trust score update failed for seller ${escrow.sellerUserId}:`,
+      error,
+    );
+  });
 
   console.log(
     `[AI Verification] Notifications sent for escrow ${escrow.escrowId}`,

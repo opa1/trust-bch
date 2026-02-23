@@ -1,32 +1,25 @@
 "use client";
 
-import { useAuth } from "@/hooks/useAuth";
-import { ThemeToggle } from "./theme-toggle";
-import { UserMenu } from "./user-menu";
-import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
-import { Button } from "@/components/ui/button";
-import { Menu } from "lucide-react";
-import { Sidebar } from "./sidebar"; // Reuse sidebar content for mobile
 import { Logo } from "@/components/logo";
-import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { useAuth } from "@/hooks/useAuth";
 import {
+  Compass,
   LayoutDashboard,
   ScrollText,
-  Users,
-  AlertCircle,
-  User,
-  LogOut,
-  Settings,
+  User
 } from "lucide-react";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { ThemeToggle } from "./theme-toggle";
+import { UserMenu } from "./user-menu";
 
 // Duplicate items for mobile menu since we can't easily reuse the exact desktop sidebar component structure
 const sidebarItems = [
   { title: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { title: "Escrows", href: "/escrows", icon: ScrollText },
-
-  { title: "Disputes", href: "/disputes", icon: AlertCircle },
+  // { title: "Disputes", href: "/disputes", icon: AlertCircle },
+  { title: "Discover", href: "/discover", icon: Compass },
   { title: "Profile", href: "/profile", icon: User },
 ];
 

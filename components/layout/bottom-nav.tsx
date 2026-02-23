@@ -9,6 +9,7 @@ import {
   Users,
   AlertCircle,
   User,
+  Compass,
 } from "lucide-react";
 
 const navItems = [
@@ -22,11 +23,15 @@ const navItems = [
     href: "/escrows",
     icon: ScrollText,
   },
-
+  // {
+  //   title: "Disputes",
+  //   href: "/disputes",
+  //   icon: AlertCircle,
+  // },
   {
-    title: "Disputes",
-    href: "/disputes",
-    icon: AlertCircle,
+    title: "Discover",
+    href: "/discover",
+    icon: Compass,
   },
   {
     title: "Profile",
@@ -61,7 +66,7 @@ export function BottomNav() {
                 isActive && "bg-primary/10",
               )}
             >
-              <Icon className={cn("h-5 w-5", isActive && "fill-current")} />
+              <Icon className="h-5 w-5" />
             </div>
             <span>{item.title}</span>
           </Link>

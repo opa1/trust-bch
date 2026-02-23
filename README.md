@@ -1,395 +1,106 @@
-# TrustBCH - Bitcoin Cash Micro-Escrow Platform
+# TrustBCH - Advanced AI-Powered Bitcoin Cash Escrow
 
-A production-grade Bitcoin Cash escrow platform built with Next.js, MongoDB, and Bitcoin Cash integration.
+TrustBCH is a production-grade micro-escrow platform for the Bitcoin Cash (BCH) ecosystem. It features agentic AI verification, a dynamic seller trust ecosystem, and a robust state-machine-driven lifecycle to ensure secure and trustworthy peer-to-peer transactions.
 
-## 🏗️ Architecture
+## 🚀 Key Features
 
-This project follows **clean architecture principles** with strict separation of concerns:
+- **Agentic AI Verification**: Automated work validation using Google Gemini, providing instant feedback and confidence scores for submitted work.
+- **Dynamic Seller Trust Score**: Sophisticated reputation system incorporating success rates, transaction volume, dispute history, and AI-validated performance metrics.
+- **Strict State Machine**: Robust escrow lifecycle management (Created → Funded → Submitted → Verified → Released/Refunded) with exhaustive audit trails.
+- **BCH Integration**: Seamless Bitcoin Cash operations including address generation, funding detection, and automated payouts via `bitcore-lib-cash`.
+- **Real-time Notifications**: Instant alerts for all critical escrow events (funding, submissions, disputes, releases).
 
-```
-lib/
-├── db/              # Database connection
-├── models/          # Mongoose schemas
-├── services/        # Business logic (reusable, testable)
-├── utils/           # Helper functions
-    ├── hash.ts      # Password hashing
-    ├── jwt.ts       # Token management
-    ├── validators.ts # Zod schemas
-    └── responses.ts # API response formatters
+## 🏗️ Technical Architecture
 
-app/api/
-├── auth/            # Authentication endpoints
-├── escrow/          # Escrow management endpoints
-└── webhook/         # Blockchain webhooks
-```
-
-**Key Principles:**
-- ✅ **No business logic in route handlers** - All logic in services
-- ✅ **Reusable functions** - Services can be called from anywhere
-- ✅ **Comprehensive error handling** - Every async operation wrapped
-- ✅ **Type safety** - Full TypeScript coverage with Zod validation
-- ✅ **No hard-coded values** - All config in environment variables
-
-## 🚀 Tech Stack
-
-- **Framework:** Next.js 16 (App Router)
-- **Database:** MongoDB with Mongoose
-- **Authentication:** JWT (jsonwebtoken)
-- **Validation:** Zod
-- **Password Hashing:** bcrypt
-- **Blockchain:** Bitcoin Cash (bitcore-lib-cash)
-- **API Client:** Axios
-
-## 📋 Prerequisites
-
-- Node.js 18+
-- MongoDB (local or Atlas)
-- BCH testnet/mainnet access
-
-## 🔧 Installation
-
-1. **Clone and install dependencies:**
-```bash
-npm install
-```
-
-2. **Set up environment variables:**
-```bash
-cp .env.example .env.local
-```
-
-Edit `.env.local` and configure:
-- `MONGODB_URI` - Your MongoDB connection string
-- `JWT_SECRET` - Secret key for JWT (min 32 chars)
-- `WALLET_ENCRYPTION_KEY` - Key for encrypting private keys (min 32 chars)
-- `BCH_NETWORK` - `testnet` or `mainnet`
-
-3. **Start development server:**
-```bash
-npm run dev
-```
-
-The API will be available at `http://localhost:3000`
-
-## 📚 API Documentation
-
-### Authentication
-
-#### **POST** `/api/auth/signup`
-Register a new user account.
-
-**Request:**
-```json
-{
-  "email": "user@example.com",
-  "password": "securePassword123",
-  "name": "John Doe"
-}
-```
-
-**Response:**
-```json
-{
-  "success": true,
-  "data": {
-    "user": {
-      "id": "...",
-      "email": "user@example.com",
-      "name": "John Doe",
-      "createdAt": "2026-02-05T..."
-    },
-    "token": "eyJhbGciOiJIUzI1NiIs..."
-  }
-}
-```
-
-#### **POST** `/api/auth/login`
-Authenticate and receive JWT token.
-
-**Request:**
-```json
-{
-  "email": "user@example.com",
-  "password": "securePassword123"
-}
-```
-
-**Response:**
-```json
-{
-  "success": true,
-  "data": {
-    "user": {
-      "id": "...",
-      "email": "user@example.com",
-      "name": "John Doe"
-    },
-    "token": "eyJhbGciOiJIUzI1NiIs..."
-  }
-}
-```
-
-### Escrow Management
-
-All escrow endpoints require authentication. Include JWT token in header:
-```
-Authorization: Bearer <your_token>
-```
-
-#### **POST** `/api/escrow/create`
-Create a new escrow transaction.
-
-**Request:**
-```json
-{
-  "receiverEmail": "receiver@example.com",
-  "amount": 0.1,
-  "description": "Payment for services rendered",
-  "expiryHours": 24
-}
-```
-
-**Response:**
-```json
-{
-  "success": true,
-  "data": {
-    "escrow": {
-      "id": "...",
-      "senderId": "...",
-      "receiverId": "...",
-      "amount": 0.1,
-      "description": "Payment for services rendered",
-      "walletAddress": "bitcoincash:qp...",
-      "status": "PENDING",
-      "expiresAt": "2026-02-06T...",
-      "createdAt": "2026-02-05T..."
-    }
-  }
-}
-```
-
-#### **GET** `/api/escrow/status?id=<escrowId>`
-Get escrow status and check for funding updates.
-
-**Response:**
-```json
-{
-  "success": true,
-  "data": {
-    "escrow": {
-      "id": "...",
-      "sender": { "name": "...", "email": "..." },
-      "receiver": { "name": "...", "email": "..." },
-      "amount": 0.1,
-      "walletAddress": "bitcoincash:qp...",
-      "status": "FUNDED",
-      "fundedAt": "2026-02-05T...",
-      "expiresAt": "2026-02-06T..."
-    }
-  }
-}
-```
-
-**Escrow Statuses:**
-- `PENDING` - Created, awaiting funding
-- `FUNDED` - Payment received on blockchain
-- `RELEASED` - Funds sent to receiver
-- `REFUNDED` - Funds returned to sender
-- `EXPIRED` - Escrow expired without funding
-
-#### **POST** `/api/escrow/release`
-Release escrow funds to receiver (sender only).
-
-**Request:**
-```json
-{
-  "id": "<escrowId>"
-}
-```
-
-**Response:**
-```json
-{
-  "success": true,
-  "data": {
-    "escrow": {
-      "id": "...",
-      "status": "RELEASED",
-      "txHash": "abc123...",
-      "completedAt": "2026-02-05T..."
-    }
-  }
-}
-```
-
-#### **POST** `/api/escrow/refund`
-Refund escrow to sender (sender or receiver if expired).
-
-**Request:**
-```json
-{
-  "id": "<escrowId>"
-}
-```
-
-**Response:**
-```json
-{
-  "success": true,
-  "data": {
-    "escrow": {
-      "id": "...",
-      "status": "REFUNDED",
-      "txHash": "def456...",
-      "completedAt": "2026-02-05T..."
-    }
-  }
-}
-```
-
-### Webhooks
-
-#### **POST** `/api/webhook/bch`
-Webhook for BCH blockchain notifications (optional).
-
-**Request:**
-```json
-{
-  "address": "bitcoincash:qp...",
-  "txHash": "abc123...",
-  "confirmations": 1
-}
-```
-
-## 🔐 Security Features
-
-- **Password Security:** bcrypt hashing with 12 salt rounds
-- **Private Key Encryption:** AES-256-CBC encryption for wallet private keys
-- **JWT Authentication:** Secure token-based authentication
-- **Input Validation:** Zod schema validation on all inputs
-- **Authorization Checks:** User-level access control on escrow operations
-
-## 🔄 Escrow Flow
-
-1. **Create Escrow:** Sender creates escrow, receives unique BCH address
-2. **Fund Escrow:** Sender sends BCH to the escrow address
-3. **Auto-Detection:** System monitors blockchain and updates status to FUNDED
-4. **Release/Refund:** 
-   - **Release:** Sender releases funds to receiver
-   - **Refund:** Sender or receiver (if expired) can refund to sender
-
-## 🧪 Testing
-
-### Manual Testing with curl
-
-**Register User:**
-```bash
-curl -X POST http://localhost:3000/api/auth/signup \
-  -H "Content-Type: application/json" \
-  -d '{
-    "email": "test@example.com",
-    "password": "password123",
-    "name": "Test User"
-  }'
-```
-
-**Login:**
-```bash
-curl -X POST http://localhost:3000/api/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{
-    "email": "test@example.com",
-    "password": "password123"
-  }'
-```
-
-**Create Escrow:**
-```bash
-curl -X POST http://localhost:3000/api/escrow/create \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer <your_token>" \
-  -d '{
-    "receiverEmail": "receiver@example.com",
-    "amount": 0.05,
-    "description": "Test escrow",
-    "expiryHours": 24
-  }'
-```
-
-## 📁 Project Structure
+The project is built with **Next.js 16 (App Router)** and follows a clean service-oriented architecture:
 
 ```
 trustbch/
-├── app/
-│   ├── api/
-│   │   ├── auth/
-│   │   │   ├── signup/route.ts
-│   │   │   └── login/route.ts
-│   │   ├── escrow/
-│   │   │   ├── create/route.ts
-│   │   │   ├── release/route.ts
-│   │   │   ├── refund/route.ts
-│   │   │   └── status/route.ts
-│   │   └── webhook/
-│   │       └── bch/route.ts
-│   └── page.tsx
+├── app/               # Next.js App Router (UI & API Routes)
+├── components/        # Shared UI components (Radix UI, Shadcn)
 ├── lib/
-│   ├── db/
-│   │   └── connect.ts
-│   ├── models/
-│   │   ├── User.model.ts
-│   │   ├── Escrow.model.ts
-│   │   └── Transaction.model.ts
-│   ├── services/
-│   │   ├── auth.service.ts
-│   │   ├── escrow.service.ts
-│   │   └── bch.service.ts
-│   └── utils/
-│       ├── hash.ts
-│       ├── jwt.ts
-│       ├── validators.ts
-│       └── responses.ts
-├── .env.example
-├── .env.local
-└── package.json
+│   ├── db/            # Prisma client and database utilities
+│   ├── utils/         # Core helpers (BCH, Encryption, Validation)
+│   └── validations/   # Zod schemas for type-safe inputs
+├── prisma/            # Database schema and migrations
+├── services/          # Business logic layers (The core "Brain")
+│   ├── ai-verification.service.ts  # Gemini AI analysis logic
+│   ├── escrow.service.ts           # Core state machine logic
+│   ├── trust-score.service.ts      # Reputation calculation engine
+│   └── agent.service.ts            # AI worker communication
+└── server/            # Blockchain-specific server logic
 ```
 
-## ⚠️ Important Notes
+## 🛠️ Tech Stack
 
-### Production Checklist
+- **Frontend**: Next.js 16, React 19, Tailwind CSS, Framer Motion
+- **Backend**: Next.js Server Actions & API Routes
+- **Database**: PostgreSQL with Prisma ORM
+- **AI Engine**: Google Gemini (via `@google/generative-ai`)
+- **Blockchain**: Bitcoin Cash (`bitcore-lib-cash`)
+- **UI Components**: Radix UI, Lucide React, Shadcn/UI
+- **State Management**: Zustand
+- **Validation**: Zod
 
-- [ ] Change `JWT_SECRET` to a strong, random value
-- [ ] Change `WALLET_ENCRYPTION_KEY` to a strong, random value
-- [ ] Set `BCH_NETWORK=mainnet` for production
-- [ ] Use MongoDB Atlas or managed MongoDB for production
-- [ ] Implement rate limiting on API endpoints
-- [ ] Add request logging and monitoring
-- [ ] Set up automated backups for MongoDB
-- [ ] **CRITICAL:** Securely backup `WALLET_ENCRYPTION_KEY` - losing it means losing access to all funds
+## 🔧 Getting Started
 
-### Development vs Production
+### Prerequisites
 
-- **Development:** Uses BCH testnet, no real funds at risk
-- **Production:** Uses BCH mainnet, handles real cryptocurrency
+- Node.js 18+
+- PostgreSQL instance (local or hosted, e.g., Neon)
+- Gemini API Key
 
-Always test thoroughly on testnet before deploying to mainnet!
+### Installation
 
-## 🎯 Next Steps
+1. **Clone and install:**
+   ```bash
+   npm install
+   ```
 
-### Phase 2 Features (Optional Enhancements)
-- User wallet management (persistent BCH addresses per user)
-- Email notifications (escrow created, funded, released)
-- Transaction history endpoint
-- Escrow list filtering and pagination
-- Multi-signature escrow support
-- Dispute resolution system
-- Admin dashboard
+2. **Environment Setup:**
+   Copy `.env.example` to `.env` and configure:
+   - `DATABASE_URL`: PostgreSQL connection string.
+   - `JWT_SECRET`: Secret for auth tokens.
+   - `WALLET_ENCRYPTION_KEY`: AES-256-CBC key for wallet security.
+   - `GEMINI_API_KEY`: For AI verification features.
+   - `BCH_NETWORK`: `testnet` or `mainnet`.
+
+3. **Database Setup:**
+   ```bash
+   npx prisma generate
+   npx prisma db push
+   ```
+
+4. **Launch Development:**
+   ```bash
+   npm run dev
+   ```
+
+## 🔐 Advanced Security
+
+- **Wallet Security**: Private keys are never stored in plain text. They are encrypted at rest using AES-256-CBC with a system-level master key.
+- **State Integrity**: Escrow status can only be modified via a central state transition engine that enforces strict lifecycle rules.
+- **Audit Trails**: Every state change is logged in the `StateTransition` table, recording the actor, timestamp, and relevant metadata.
+
+## 🤖 AI Verification & Trust Score
+
+TrustBCH differentiates itself with its automated verification layer:
+
+1. **AI Analysis**: Upon work submission, the `AiVerificationService` triggers a Gemini-powered analysis to check if the work matches the requirements.
+2. **Confidence Scores**: The AI provides a recommendation (`APPROVE`, `REJECT`, `NEEDS_REVIEW`) and a confidence percentage.
+3. **Dynamic Reputation**: The `TrustScoreService` recalculates the seller's score (0-100) after every transaction, factoring in success rate, volume, and AI feedback.
+
+## 📁 Project Layout
+
+- `app/api/escrow`: Endpoints for lifecycle management.
+- `app/api/ai-worker`: Callback endpoint for AI verification results.
+- `services/escrow.service.ts`: The primary orchestrator for the escrow state machine.
+- `lib/db/prisma.ts`: Singleton Prisma client for database operations.
 
 ## 📄 License
 
-This is a private MVP project.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ## 🤝 Support
 
-For issues or questions, contact the development team.
+For development issues or questions, contact the project maintainers.

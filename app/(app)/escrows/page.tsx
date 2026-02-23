@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Plus } from "lucide-react";
+import { AlertCircle, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { EscrowList } from "@/components/escrows/escrow-list";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -50,13 +50,23 @@ export default function EscrowsPage() {
           </p>
         </div>
 
-        <Button
-          onClick={() => router.push("/escrows/create")}
-          className="gap-2"
-        >
-          <Plus className="h-4 w-4" />
-          Create Escrow
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            onClick={() => router.push("/escrows/create")}
+            className="gap-2"
+          >
+            <Plus className="h-4 w-4" />
+            Create Escrow
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => router.push("/disputes")}
+            className="gap-2"
+          >
+            <AlertCircle className="h-4 w-4" />
+            Disputes
+          </Button>
+        </div>
       </div>
 
       <div className="flex flex-col gap-4">
