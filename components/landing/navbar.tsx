@@ -16,8 +16,9 @@ import { useState } from "react";
 
 const navItems = [
   { name: "Features", href: "#features" },
-  { name: "How it Works", href: "#how-it-works" },
+  { name: "How It Works", href: "#how-it-works" },
   { name: "Use Cases", href: "#use-cases" },
+  { name: "Testimonials", href: "#testimonials" },
 ];
 
 export function LandingNavbar() {

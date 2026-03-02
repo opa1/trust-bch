@@ -22,33 +22,39 @@ export function HowItWorksSection() {
           </p>
         </div>
 
-        <div className="grid gap-8 lg:grid-cols-4 relative">
+        <div className="grid gap-8 lg:grid-cols-5 relative">
           {/* Connecting Line (Desktop) - Improved Alignment */}
-          <div className="hidden lg:block absolute top-[2.5rem] left-0 right-0 h-0.5 bg-border -z-10 translate-y-1/2 w-full max-w-[80%] mx-auto"></div>
+          <div className="hidden lg:block absolute top-10 left-0 right-0 h-0.5 bg-border -z-10 translate-y-1/2 w-full max-w-[80%] mx-auto"></div>
 
           <StepCard
             number="01"
-            title="Create Agreement"
-            description="Seller creates a transaction with clear terms and price."
+            title="Create"
+            description="Seller creates a transaction with clear terms, price, and requirements."
             delay={0.1}
           />
           <StepCard
             number="02"
-            title="Buyer Deposits"
-            description="Buyer reviews terms and deposits BCH into the secure escrow."
+            title="Fund"
+            description="Buyer reviews terms and deposits BCH into the secure escrow smart contract."
             delay={0.2}
           />
           <StepCard
             number="03"
-            title="Work / Delivery"
-            description="Seller delivers goods or services as agreed."
+            title="Submit"
+            description="Seller delivers goods or services and submits proof of work to the platform."
             delay={0.3}
           />
           <StepCard
             number="04"
-            title="Funds Released"
-            description="Buyer approves the work, and funds are instantly released."
+            title="Verify"
+            description="Agentic AI analyzes the submission and provides a confidence score and recommendation."
             delay={0.4}
+          />
+          <StepCard
+            number="05"
+            title="Release"
+            description="Upon approval, funds are instantly released via Bitcoin Cash. In case of issues, a refund is issued."
+            delay={0.5}
           />
         </div>
       </div>
@@ -79,7 +85,7 @@ function StepCard({
         {number}
       </div>
       <h3 className="text-xl font-bold">{title}</h3>
-      <p className="text-muted-foreground max-w-[250px]">{description}</p>
+      <p className="text-muted-foreground max-w-62.5">{description}</p>
     </motion.div>
   );
 }

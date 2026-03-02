@@ -1,7 +1,7 @@
 "use client";
 
 import { Card, CardContent } from "@/components/ui/card";
-import { Shield, Zap, Lock, RefreshCw, Users, Code } from "lucide-react";
+import { Brain, Star, Workflow, Bitcoin, Bell, Code } from "lucide-react";
 import { motion } from "framer-motion";
 
 export function FeaturesSection() {
@@ -13,40 +13,41 @@ export function FeaturesSection() {
             Why Choose TrustBCH?
           </h2>
           <p className="text-muted-foreground text-lg">
-            We combine the speed of Bitcoin Cash with robust security features
-            to ensure every transaction is safe.
+            We combine the power of AI verification with the speed of Bitcoin
+            Cash to ensure every peer-to-peer transaction is secure and
+            trustworthy.
           </p>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
           <FeatureCard
-            icon={<Shield className="h-10 w-10 text-primary" />}
-            title="Secure Escrow"
-            description="Funds are held in a secure multi-sig smart contract until both parties are satisfied. No more scams."
+            icon={<Brain className="h-10 w-10 text-primary" />}
+            title="Agentic AI Verification"
+            description="Automated work validation providing instant feedback and confidence scores for submitted work."
             delay={0.1}
           />
           <FeatureCard
-            icon={<Users className="h-10 w-10 text-primary" />}
-            title="Agent Mediation"
-            description="Professional agents are available to mediate disputes fairly and quickly if anything goes wrong."
+            icon={<Star className="h-10 w-10 text-primary" />}
+            title="Dynamic Trust Score"
+            description="Sophisticated reputation system incorporating success rates, volume, and AI-validated metrics."
             delay={0.2}
           />
           <FeatureCard
-            icon={<Zap className="h-10 w-10 text-primary" />}
-            title="Instant Settlements"
-            description="Enjoy the lightning-fast speed of Bitcoin Cash. Funds are released immediately upon approval."
+            icon={<Workflow className="h-10 w-10 text-primary" />}
+            title="Strict State Machine"
+            description="Robust escrow lifecycle management with exhaustive audit trails for secure and trustworthy transactions."
             delay={0.3}
           />
           <FeatureCard
-            icon={<Lock className="h-10 w-10 text-primary" />}
-            title="Encrypted Chat"
-            description="Communicate securely with your counterparty directly within the platform. Your privacy is our priority."
+            icon={<Bitcoin className="h-10 w-10 text-primary" />}
+            title="BCH Integration"
+            description="Seamless Bitcoin Cash operations including address generation, funding detection, and automated payouts."
             delay={0.4}
           />
           <FeatureCard
-            icon={<RefreshCw className="h-10 w-10 text-primary" />}
-            title="Real-time Tracking"
-            description="Track the status of your transaction at every step with real-time notifications and updates."
+            icon={<Bell className="h-10 w-10 text-primary" />}
+            title="Real-time Notifications"
+            description="Instant alerts for all critical escrow events including funding, submissions, disputes, and releases."
             delay={0.5}
           />
           <FeatureCard

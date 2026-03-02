@@ -6,7 +6,7 @@ import { motion } from "framer-motion";
 
 export function TestimonialsSection() {
   return (
-    <section className="py-20 lg:py-28 bg-background">
+    <section id="testimonials" className="py-20 lg:py-28 bg-background">
       <div className="w-full max-w-7xl mx-auto px-4 md:px-6">
         <div className="text-center mb-16 max-w-3xl mx-auto">
           <h2 className="text-3xl font-bold tracking-tight md:text-5xl">

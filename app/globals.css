@@ -206,6 +206,15 @@
   }
 }
 
+@keyframes spin-reverse {
+  from {
+    transform: rotate(360deg);
+  }
+  to {
+    transform: rotate(0deg);
+  }
+}
+
 /* Sonner Toast Customization */
 [data-sonner-toast] {
   font-family: var(--font-montserrat), sans-serif !important;

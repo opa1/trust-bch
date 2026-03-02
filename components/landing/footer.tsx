@@ -2,6 +2,7 @@
 
 import { Shield } from "lucide-react";
 import Link from "next/link";
+import { Logo } from "../logo";
 
 export function FooterSection() {
   return (
@@ -9,9 +10,7 @@ export function FooterSection() {
       <div className="w-full max-w-7xl mx-auto px-4 md:px-6">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-8 text-center">
           <div className="col-span-2 md:col-span-1 space-y-4 flex flex-col items-center">
-            <h3 className="font-bold text-xl flex items-center gap-2">
-              <Shield className="h-6 w-6 text-primary" /> TrustBCH
-            </h3>
+            <Logo/>
             <p className="text-sm text-muted-foreground max-w-xs">
               Secure, decentralized escrow services for the modern web. Built on
               Bitcoin Cash.
@@ -71,12 +70,12 @@ export function FooterSection() {
             <h4 className="font-semibold mb-4">Legal</h4>
             <ul className="space-y-2 text-sm text-muted-foreground">
               <li>
-                <Link href="#" className="hover:text-primary transition-colors">
+                <Link href="/privacy" className="hover:text-primary transition-colors">
                   Privacy Policy
                 </Link>
               </li>
               <li>
-                <Link href="#" className="hover:text-primary transition-colors">
+                <Link href="/terms" className="hover:text-primary transition-colors">
                   Terms of Service
                 </Link>
               </li>
